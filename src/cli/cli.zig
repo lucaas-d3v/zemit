@@ -32,7 +32,7 @@ pub fn cli() !void {
     }
 
     if (checker.cli_args_equals(first_arg, &.{ "-v", "--version" })) {
-        version.version("v0.0.1-dev");
+        version.version("v0.0.2-dev");
         return;
     }
 
