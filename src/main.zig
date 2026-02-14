@@ -1,5 +1,6 @@
 const std = @import("std");
+const cli = @import("./cli/cli.zig");
 
 pub fn main() !void {
-    std.debug.print("Hello from zemit!\n", .{});
+    try cli.cli();
 }

@@ -3,7 +3,7 @@
 ### Manual
 Compile
 ```bash
-zig build -Doptimize=ReleaseFast
+zig build -Doptimize=ReleaseSmall
 ```
 
 The binary will be generated in:
