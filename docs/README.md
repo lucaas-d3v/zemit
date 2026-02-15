@@ -92,9 +92,9 @@ Artifacts are written to:
 ## Output layout
 
 ```text
-.zemit/dist/x86_64-linux-musl/yourbin-<version-in-build.zig>-<target>
-.zemit/dist/x86_64-windows-gnu/yourbin-<version-in-build.zig>-<target>.exe
-.zemit/dist/aarch64-macos/yourbin-<version-in-build.zig>-<target>
+.zemit/dist/x86_64-linux-musl/yourbin
+.zemit/dist/x86_64-windows-gnu/yourbin.exe
+.zemit/dist/aarch64-macos/yourbin
 ```
 
 Binary names include version and target when applicable.
