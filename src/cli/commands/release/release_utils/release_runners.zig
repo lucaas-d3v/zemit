@@ -1,10 +1,19 @@
 const std = @import("std");
 const arch = @import("../release.zig");
 
-pub fn compile_and_move(alloc: std.mem.Allocator, architecture: arch.Architectures, out_path: []const u8, bin_name: []const u8) !std.process.Child.Term {
-    std.debug.print("Compiling for: {s}\n", .{out_path});
+pub fn compile_and_move(alloc: std.mem.Allocator, architecture: arch.Architectures, out_path: []const u8, bin_name: []const u8, verbose: bool) !std.process.Child.Term {
+    const arch_name = architecture.asString();
+    const sep = std.fs.path.sep;
 
-    const temp_prefix = try std.fmt.allocPrint(alloc, "zig-out-{s}", .{architecture.asString()});
+    const full = try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{ out_path, sep, arch_name });
+    defer alloc.free(full);
+
+    if (verbose) {
+        std.debug.print("Target: {s}\n", .{arch_name});
+        std.debug.print("Out: {s}\n", .{full});
+    }
+
+    const temp_prefix = try std.fmt.allocPrint(alloc, "zig-out-{s}", .{arch_name});
     defer alloc.free(temp_prefix);
 
     std.fs.cwd().makePath(temp_prefix) catch |err| switch (err) {
@@ -14,7 +23,7 @@ pub fn compile_and_move(alloc: std.mem.Allocator, architecture: arch.Architectur
         },
     };
 
-    const target_arg = try std.fmt.allocPrint(alloc, "-Dtarget={s}", .{architecture.asString()});
+    const target_arg = try std.fmt.allocPrint(alloc, "-Dtarget={s}", .{arch_name});
     defer alloc.free(target_arg);
 
     const args = [_][]const u8{
@@ -26,16 +35,31 @@ pub fn compile_and_move(alloc: std.mem.Allocator, architecture: arch.Architectur
         "-Doptimize=ReleaseSmall",
     };
 
-    std.debug.print("Running: zig build --prefix {s} {s} -Doptimize=ReleaseSmall\n", .{ temp_prefix, target_arg });
-    var child = std.process.Child.init(&args, alloc);
-    child.stdout_behavior = .Inherit;
-    child.stderr_behavior = .Inherit;
+    if (verbose) {
+        std.debug.print("Running: zig build --prefix {s} {s} -Doptimize=ReleaseSmall\n", .{ temp_prefix, target_arg });
+    }
 
+    var child = std.process.Child.init(&args, alloc);
+
+    if (verbose) {
+        child.stdout_behavior = .Inherit;
+        child.stderr_behavior = .Inherit;
+    } else {
+        child.stdout_behavior = .Ignore;
+        child.stderr_behavior = .Ignore;
+    }
+
+    var build_timer = try std.time.Timer.start();
     const term = try child.spawnAndWait();
+    const elapsed_ns = build_timer.read();
 
     switch (term) {
         .Exited => |code| {
             if (code != 0) {
+                std.debug.print("\nERROR: build failed for {s}. Run: zemit -v release\n", .{arch_name});
+                std.debug.print("Out: {s}\n", .{full});
+                std.debug.print("Hint: run `zemit -v release` to see the full zig build output.\n", .{});
+
                 return error.CompilationFailed;
             }
         },
@@ -44,11 +68,12 @@ pub fn compile_and_move(alloc: std.mem.Allocator, architecture: arch.Architectur
         },
     }
 
-    std.debug.print("✓ Compilation completed successfully!\n", .{});
-    const arch_name = architecture.asString();
-    const sep = std.fs.path.sep;
+    const elapsed_s = @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000_000.0;
+    std.debug.print("[{s}] ok ({d:.2}s)\n", .{ arch_name, elapsed_s });
 
-    const dist_arch_dir = try std.fmt.allocPrint(alloc, ".zemit{c}dist{c}{s}", .{ sep, sep, arch_name });
+    if (verbose) std.debug.print("\n", .{});
+
+    const dist_arch_dir = try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{ out_path, sep, arch_name });
     defer alloc.free(dist_arch_dir);
 
     std.fs.cwd().makePath(dist_arch_dir) catch |err| switch (err) {
@@ -58,7 +83,10 @@ pub fn compile_and_move(alloc: std.mem.Allocator, architecture: arch.Architectur
         },
     };
 
-    const bin_extension = if (std.mem.indexOf(u8, arch_name, "windows") != null) ".exe" else "";
+    const bin_extension = switch (architecture) {
+        .x86_64_windows_gnu, .x86_64_windows_msvc => ".exe",
+        else => "",
+    };
     const source_bin = try std.fmt.allocPrint(alloc, "{s}{c}bin{c}{s}{s}", .{ temp_prefix, sep, sep, bin_name, bin_extension });
     defer alloc.free(source_bin);
 

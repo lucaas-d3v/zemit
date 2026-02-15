@@ -1,32 +1,29 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# Descobre o caminho absoluto de onde o script está rodando
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
 DEST_DIR="/usr/local/bin"
-BIN_DIR="$SCRIPT_DIR/zig-out/bin/zemit"
+DEST_BIN="$DEST_DIR/zemit"
+BIN_SRC="$SCRIPT_DIR/zig-out/bin/zemit"
 
-if ! zig version &> /dev/null; then
-    echo "Zig não está instalado ou não foi encontrado."
-    echo "Recomenda-se a instalação do Zig 0.13.0"
-    exit 1  
+if ! command -v zig &> /dev/null; then
+  echo "Zig is not installed or could not be found."
+  echo "Zig 0.13.0 is recommended."
+  exit 1
 fi
 
-echo "Compilando binário zemit..."
+echo "Compiling zemit..."
 cd "$SCRIPT_DIR"
-zig build -Doptimize=ReleaseSmall
-echo "Binário compilado"
+zig build -Doptimize=ReleaseSmall -Dstrip=true
+echo "Binary compiled: $BIN_SRC"
 
-echo "Copiando binário zemit para $DEST_DIR"
-if ! sudo cp "$BIN_DIR" "$DEST_DIR"; then
-    echo "Erro: Falha ao copiar para $DEST_DIR. Verifique as permissões."
-    exit 1
+echo "Installing to $DEST_BIN"
+sudo install -m 0755 "$BIN_SRC" "$DEST_BIN"
+
+if ! "$DEST_BIN" --version &> /dev/null; then
+  echo "An error occurred while executing '$DEST_BIN --version'"
+  exit 1
 fi
 
-if ! zemit --version &> /dev/null; then
-    echo "Ocorreu algum erro ao executar 'zemit --version'"
-    exit 1
-fi
-
-echo "Instalação concluída com sucesso!"
+echo "Installation completed successfully!"

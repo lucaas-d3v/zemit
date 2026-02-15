@@ -14,9 +14,8 @@ pub fn cli() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const leak_status = gpa.deinit();
-        if (leak_status == .leak) std.debug.print("Memory Leak detectado!\n", .{});
+        if (leak_status == .leak) std.debug.print("Memory Leak detected!\n", .{});
     }
-
     const alloc = gpa.allocator();
 
     var args = try std.process.argsWithAllocator(alloc);
@@ -24,28 +23,43 @@ pub fn cli() !void {
 
     _ = args.next(); // bin name
 
-    // if there are no arguments
-    const first_arg = args.next() orelse {
+    var verbose: bool = false;
+    var command: ?[]const u8 = null;
+
+    // global flags
+    while (args.next()) |arg| {
+        if (checker.cli_args_equals(arg, &.{ "-h", "--help" })) {
+            helps.help();
+            return;
+        }
+
+        if (checker.cli_args_equals(arg, &.{ "-V", "--version" })) {
+            version.version();
+            return;
+        }
+
+        if (checker.cli_args_equals(arg, &.{ "-v", "--verbose" })) {
+            verbose = true;
+            continue;
+        }
+
+        // Se chegou aqui, não é uma flag - deve ser o comando
+        command = arg;
+        break;
+    }
+
+    // Se não encontrou comando, mostra help
+    const cmd = command orelse {
         helps.help();
         return;
     };
 
-    if (checker.str_equals(first_arg, "release")) {
-        try release.release(alloc, &args);
-        return;
-    }
-
-    // generals
-    if (checker.cli_args_equals(first_arg, &.{ "-h", "--help" })) {
-        helps.help();
-        return;
-    }
-
-    if (checker.cli_args_equals(first_arg, &.{ "-v", "--version" })) {
-        version.version("v0.1.0-dev");
+    // dispatch
+    if (checker.str_equals(cmd, "release")) {
+        try release.release(alloc, &args, verbose);
         return;
     }
 
     helps.help();
-    print("\nUnknown command: '{s}'\n", .{first_arg});
+    print("\nUnknown command: '{s}'\n", .{cmd});
 }

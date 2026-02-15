@@ -1,5 +1,5 @@
 .send.txt
 .zig-cache
-zig-out
+zig-out*
 internal_docs
 .zemit
