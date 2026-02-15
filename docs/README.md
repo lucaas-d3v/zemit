@@ -185,6 +185,17 @@ zemit follows a pragmatic Unix-style philosophy:
 
 ---
 
+## Repository
+
+Canonical repository:
+- https://codeberg.org/lucaas-d3v/zemit
+
+Mirrors:
+- https://github.com/lucaas-d3v/zemit
+- https://gitlab.com/lucaas-d3v/zemit
+
+---
+
 ## Contributing
 
 Contributions, issues, and design discussions are welcome.
