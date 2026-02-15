@@ -14,9 +14,6 @@ const ValidProject = struct {
 };
 
 pub fn is_valid_project(alloc: std.mem.Allocator, dir: std.fs.Dir) !bool {
-    // var walker = try dir.walk(alloc);
-    // defer walker.deinit();
-
     var valid_p = ValidProject{
         .build_zig = false,
         .zon_build_zig = false,
@@ -58,7 +55,6 @@ pub fn is_valid_project(alloc: std.mem.Allocator, dir: std.fs.Dir) !bool {
         return false;
     }
 
-    // return if ok
     return valid_p.is_valid();
 }
 

@@ -11,7 +11,17 @@ const version = @import("./commands/generics/version.zig");
 const release = @import("./commands/release/release.zig");
 
 pub fn cli() !void {
-    var args = std.process.args();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        const leak_status = gpa.deinit();
+        if (leak_status == .leak) std.debug.print("Memory Leak detectado!\n", .{});
+    }
+
+    const alloc = gpa.allocator();
+
+    var args = try std.process.argsWithAllocator(alloc);
+    defer args.deinit();
+
     _ = args.next(); // bin name
 
     // if there are no arguments
@@ -21,7 +31,7 @@ pub fn cli() !void {
     };
 
     if (checker.str_equals(first_arg, "release")) {
-        try release.release(&args);
+        try release.release(alloc, &args);
         return;
     }
 
@@ -32,7 +42,7 @@ pub fn cli() !void {
     }
 
     if (checker.cli_args_equals(first_arg, &.{ "-v", "--version" })) {
-        version.version("v0.0.2-dev");
+        version.version("v0.1.0-dev");
         return;
     }
 
