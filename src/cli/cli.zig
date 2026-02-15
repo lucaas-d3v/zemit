@@ -1,5 +1,6 @@
 const std = @import("std");
-const print = std.debug.print;
+const builtin = @import("builtin");
+const build_options = @import("build_options");
 
 // internals
 const checker = @import("../utils/checkers.zig");
@@ -7,7 +8,6 @@ const checker = @import("../utils/checkers.zig");
 // commands
 const helps = @import("./commands/generics/help_command.zig");
 const version = @import("./commands/generics/version.zig");
-
 const release = @import("./commands/release/release.zig");
 
 pub fn cli() !void {
@@ -34,7 +34,7 @@ pub fn cli() !void {
         }
 
         if (checker.cli_args_equals(arg, &.{ "-V", "--version" })) {
-            version.version();
+            version.version(build_options.zemit_version);
             return;
         }
 
@@ -43,12 +43,10 @@ pub fn cli() !void {
             continue;
         }
 
-        // Se chegou aqui, não é uma flag - deve ser o comando
         command = arg;
         break;
     }
 
-    // Se não encontrou comando, mostra help
     const cmd = command orelse {
         helps.help();
         return;
@@ -56,10 +54,13 @@ pub fn cli() !void {
 
     // dispatch
     if (checker.str_equals(cmd, "release")) {
-        try release.release(alloc, &args, verbose);
+        try release.release(alloc, &args, build_options.zemit_version, verbose);
         return;
     }
 
     helps.help();
-    print("\nUnknown command: '{s}'\n", .{cmd});
+    const stderr = std.io.getStdErr().writer();
+    try stderr.print("\nError: Unknown command '{s}'\n", .{cmd});
+
+    std.process.exit(1);
 }

@@ -2,3 +2,5 @@
 zig-out*
 internal_docs
 .zemit
+y*
+release_gitlab.sh

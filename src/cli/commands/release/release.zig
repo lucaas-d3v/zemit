@@ -1,8 +1,8 @@
 const std = @import("std");
-const print = std.debug.print;
 
 // internals
 const checker = @import("../../../utils/checkers.zig");
+const r_checker = @import("./release_utils/release_checkers.zig");
 
 // release utils
 const utils = @import("./release_utils/release_checkers.zig");
@@ -10,6 +10,7 @@ const runner = @import("./release_utils/release_runners.zig");
 
 // commands
 const helps = @import("../generics/help_command.zig");
+const fmt = @import("../../../utils/stdout_formatter.zig");
 
 pub const Architectures = enum {
     x86_64_linux_gnu,
@@ -53,16 +54,33 @@ pub const Architectures = enum {
     }
 };
 
-pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, verbose: bool) !void {
+pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version: []const u8, verbose: bool) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
+
     // flags para 'release'
+    const is_tty = r_checker.is_TTY();
+    var color = is_tty;
+
+    const env_no_color = std.process.getEnvVarOwned(alloc, "NO_COLOR") catch null;
+    if (env_no_color) |val| {
+        defer alloc.free(val);
+        color = false;
+    }
+
     while (args.next()) |flag| {
         if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
             helps.helpOf("release", &.{"-h, --help"}, &.{"compiles multi-target and places correctly named binaries in dist/"});
             return;
         }
 
+        if (checker.cli_args_equals(flag, &.{"--no-color"})) {
+            color = false;
+            continue;
+        }
+
         helps.helpOf("release", &.{"-h, --help"}, &.{"compiles multi-target and places correctly named binaries in dist/"});
-        print("\nUnknown flag for command release: '{s}'\n", .{flag});
+        try stderr.print("\nUnknown flag for command release: '{s}'\n", .{flag});
         return;
     }
 
@@ -70,7 +88,7 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, verbose
     defer dir.close();
 
     if (!(try utils.is_valid_project(alloc, dir))) {
-        print("ERROR: you are not in a valid zig project (project generated via `zig init`)\n", .{});
+        try stderr.print("ERROR: you are not in a valid zig project (project generated via `zig init`)\n", .{});
         return;
     }
 
@@ -88,31 +106,40 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, verbose
     const total = std.enums.values(Architectures).len;
 
     const bin_name = std.fs.path.basename(full_path_dir);
-    print("\nStarting release for {d} targets...\n\n", .{total});
+
+    try stdout.print("\nStarting release for {d} targets...\n\n", .{total});
     var build_timer = try std.time.Timer.start();
 
     for (1.., std.enums.values(Architectures)) |i, architecture| {
-        const exit_code = runner.compile_and_move(alloc, architecture, dist_dir_path, bin_name, verbose, i, total) catch return;
+        const exit_code = runner.compile_and_move(alloc, architecture, dist_dir_path, bin_name, version, verbose, i, total, color) catch return;
 
         switch (exit_code) {
             .Exited => |code| {
                 if (code != 0) {
-                    print("ERROR: We were unable to compile your binary for '{s}'. exit code: {}\n", .{ architecture.asString(), code });
+                    try stderr.print("ERROR: We were unable to compile your binary for '{s}'. exit code: {}\n", .{ architecture.asString(), code });
                     return;
                 }
             },
             .Signal, .Stopped, .Unknown => {
-                print("ERROR: Build process for '{s}' stopped or failed.\n", .{architecture.asString()});
+                try stderr.print("ERROR: Build process for '{s}' stopped or failed.\n", .{architecture.asString()});
                 return;
             },
         }
     }
     const elapsed_ns = build_timer.read();
-    const elapsed_s = @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000_000.0;
+
+    const ok = try fmt.green(alloc, "✓", is_tty);
+    defer alloc.free(ok);
+
+    const raw_dur = try fmt.fmt_duration(alloc, elapsed_ns);
+    defer alloc.free(raw_dur);
+
+    const dur = try fmt.gray(alloc, raw_dur, color);
+    defer alloc.free(dur);
 
     if (verbose) {
-        print("✓ Compilation completed! Binaries in: {s} ({d:.2}s)\n", .{ dist_dir_path, elapsed_s });
+        try stdout.print("{s} Compilation completed! Binaries in: {s} {s}\n", .{ ok, dist_dir_path, dur });
     } else {
-        print("\n✓ Compilation completed! Binaries in: {s} ({d:.2}s)\n", .{ dist_dir_path, elapsed_s });
+        try stdout.print("\n{s} Compilation completed! Binaries in: {s} {s}\n", .{ ok, dist_dir_path, dur });
     }
 }
