@@ -85,12 +85,14 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, verbose
     const full_path_dir = try dir.realpathAlloc(alloc, ".");
     defer alloc.free(full_path_dir);
 
+    const total = std.enums.values(Architectures).len;
+
     const bin_name = std.fs.path.basename(full_path_dir);
-    print("\nStarting release for {d} targets...\n\n", .{std.enums.values(Architectures).len});
+    print("\nStarting release for {d} targets...\n\n", .{total});
     var build_timer = try std.time.Timer.start();
 
-    for (std.enums.values(Architectures)) |architecture| {
-        const exit_code = runner.compile_and_move(alloc, architecture, dist_dir_path, bin_name, verbose) catch return;
+    for (1.., std.enums.values(Architectures)) |i, architecture| {
+        const exit_code = runner.compile_and_move(alloc, architecture, dist_dir_path, bin_name, verbose, i, total) catch return;
 
         switch (exit_code) {
             .Exited => |code| {
@@ -106,7 +108,11 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, verbose
         }
     }
     const elapsed_ns = build_timer.read();
-
     const elapsed_s = @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000_000.0;
-    print("\n✓ Compilation completed! Binaries in: {s} ({d:.2}s)\n", .{ dist_dir_path, elapsed_s });
+
+    if (verbose) {
+        print("✓ Compilation completed! Binaries in: {s} ({d:.2}s)\n", .{ dist_dir_path, elapsed_s });
+    } else {
+        print("\n✓ Compilation completed! Binaries in: {s} ({d:.2}s)\n", .{ dist_dir_path, elapsed_s });
+    }
 }
