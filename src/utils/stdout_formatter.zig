@@ -14,6 +14,9 @@ fn wrap(
     return try std.fmt.allocPrint(alloc, "{s}{s}\x1b[0m", .{ start, txt });
 }
 
+pub fn cyan(alloc: std.mem.Allocator, txt: []const u8, enabled: bool) ![]u8 {
+    return wrap(alloc, txt, code("\x1b[36m"), enabled);
+}
 pub fn green(alloc: std.mem.Allocator, txt: []const u8, enabled: bool) ![]u8 {
     return wrap(alloc, txt, code("\x1b[32m"), enabled);
 }

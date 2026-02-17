@@ -4,7 +4,7 @@ const arch = @import("../release.zig");
 const checker = @import("./release_checkers.zig");
 const fmt = @import("../../../../utils/stdout_formatter.zig");
 
-pub fn compile_and_move(alloc: std.mem.Allocator, architecture: arch.Architectures, out_path: []const u8, bin_name: []const u8, version: []const u8, verbose: bool, i: usize, total: usize, color: bool) !std.process.Child.Term {
+pub fn compile_and_move(alloc: std.mem.Allocator, architecture: arch.Architectures, out_path: []const u8, bin_name: []const u8, version: []const u8, d_optimize: []const u8, zig_args: []const []const u8, verbose: bool, i: usize, total: usize, color: bool) !std.process.Child.Term {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
@@ -32,24 +32,42 @@ pub fn compile_and_move(alloc: std.mem.Allocator, architecture: arch.Architectur
     const target_arg = try std.fmt.allocPrint(alloc, "-Dtarget={s}", .{arch_name});
     defer alloc.free(target_arg);
 
-    const args = [_][]const u8{
+    const d_optimize_fmt = try std.fmt.allocPrint(alloc, "-Doptimize={s}", .{d_optimize});
+    defer alloc.free(d_optimize_fmt);
+
+    // the base command
+    const base_args = [_][]const u8{
         "zig",
         "build",
         "--prefix",
         temp_prefix,
         target_arg,
-        "-Doptimize=ReleaseSmall",
+        d_optimize_fmt,
     };
 
+    var argv_list = std.ArrayList([]const u8).init(alloc);
+    defer argv_list.deinit();
+
+    try argv_list.appendSlice(&base_args);
+    try argv_list.appendSlice(zig_args);
+
+    const full_argv = argv_list.items; // Aqui usamos o conteúdo da lista
+
     if (verbose) {
-        try stdout.print("Running: zig build --prefix {s} {s} -Doptimize=ReleaseSmall\n", .{ temp_prefix, target_arg });
+        try stdout.print("Running: ", .{});
+
+        for (full_argv) |arg| {
+            try stdout.print("{s} ", .{arg});
+        }
+
+        try stdout.print("\n", .{});
     }
 
     const prefix_line = try std.fmt.allocPrint(alloc, "[{d}/{d}] {s}", .{ i, total, arch_name });
     defer alloc.free(prefix_line);
 
     var build_timer = try std.time.Timer.start();
-    const term = try run_with_spinner(alloc, &args, prefix_line, verbose);
+    const term = try run_with_spinner(alloc, full_argv, prefix_line, verbose);
     const elapsed_ns = build_timer.read();
 
     switch (term) {
@@ -172,14 +190,16 @@ fn run_with_spinner(
         return child.wait();
     }
 
-    var state = SpinnerState{};
-    var spinner = try std.Thread.spawn(.{}, spinnerThread, .{ &state, prefix_line });
-    defer spinner.join();
+    const state = try alloc.create(SpinnerState);
+    state.* = SpinnerState{};
+    defer alloc.destroy(state);
+
+    var spinner = try std.Thread.spawn(.{}, spinnerThread, .{ state, prefix_line });
 
     const term = try child.wait();
-
     state.running.store(false, .release);
 
+    spinner.join();
     return term;
 }
 

@@ -10,14 +10,7 @@ const helps = @import("./commands/generics/help_command.zig");
 const version = @import("./commands/generics/version.zig");
 const release = @import("./commands/release/release.zig");
 
-pub fn cli() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer {
-        const leak_status = gpa.deinit();
-        if (leak_status == .leak) std.debug.print("Memory Leak detected!\n", .{});
-    }
-    const alloc = gpa.allocator();
-
+pub fn cli(alloc: std.mem.Allocator) !void {
     var args = try std.process.argsWithAllocator(alloc);
     defer args.deinit();
 
@@ -61,6 +54,4 @@ pub fn cli() !void {
     helps.help();
     const stderr = std.io.getStdErr().writer();
     try stderr.print("\nError: Unknown command '{s}'\n", .{cmd});
-
-    std.process.exit(1);
 }

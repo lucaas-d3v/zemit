@@ -13,6 +13,16 @@ const runner = @import("./release_utils/release_runners.zig");
 const helps = @import("../generics/help_command.zig");
 const fmt = @import("../../../utils/stdout_formatter.zig");
 
+const TargetMap = std.StaticStringMap(Architectures).initComptime(blk: {
+    const fields = @typeInfo(Architectures).Enum.fields;
+    var pairs: [fields.len]struct { []const u8, Architectures } = undefined;
+    for (fields, 0..) |field, i| {
+        const enum_val: Architectures = @enumFromInt(field.value);
+        pairs[i] = .{ enum_val.asString(), enum_val };
+    }
+    break :blk pairs;
+});
+
 pub const Architectures = enum {
     x86_64_linux_gnu,
     x86_64_linux_musl,
@@ -36,38 +46,25 @@ pub const Architectures = enum {
         return switch (self) {
             .x86_64_linux_gnu => "x86_64-linux-gnu",
             .x86_64_linux_musl => "x86_64-linux-musl",
-
             .aarch64_linux_gnu => "aarch64-linux-gnu",
             .aarch64_linux_musl => "aarch64-linux-musl",
-
             .arm_linux_gnueabihf => "arm-linux-gnueabihf",
             .arm_linux_musleabihf => "arm-linux-musleabihf",
-
             .riscv64_linux_gnu => "riscv64-linux-gnu",
             .riscv64_linux_musl => "riscv64-linux-musl",
-
             .x86_64_windows_gnu => "x86_64-windows-gnu",
             .x86_64_windows_msvc => "x86_64-windows-msvc",
-
             .x86_64_macos => "x86_64-macos",
             .aarch64_macos => "aarch64-macos",
         };
     }
 
+    pub fn exists(name: []const u8) bool {
+        return TargetMap.has(name);
+    }
+
     pub fn fromString(input: []const u8) ?Architectures {
-        if (std.mem.eql(u8, input, "x86_64-linux-gnu")) return .x86_64_linux_gnu;
-        if (std.mem.eql(u8, input, "x86_64-linux-musl")) return .x86_64_linux_musl;
-        if (std.mem.eql(u8, input, "aarch64-linux-gnu")) return .aarch64_linux_gnu;
-        if (std.mem.eql(u8, input, "aarch64-linux-musl")) return .aarch64_linux_musl;
-        if (std.mem.eql(u8, input, "arm-linux-gnueabihf")) return .arm_linux_gnueabihf;
-        if (std.mem.eql(u8, input, "arm-linux-musleabihf")) return .arm_linux_musleabihf;
-        if (std.mem.eql(u8, input, "riscv64-linux-gnu")) return .riscv64_linux_gnu;
-        if (std.mem.eql(u8, input, "riscv64-linux-musl")) return .riscv64_linux_musl;
-        if (std.mem.eql(u8, input, "x86_64-windows-gnu")) return .x86_64_windows_gnu;
-        if (std.mem.eql(u8, input, "x86_64-windows-msvc")) return .x86_64_windows_msvc;
-        if (std.mem.eql(u8, input, "x86_64-macos")) return .x86_64_macos;
-        if (std.mem.eql(u8, input, "aarch64-macos")) return .aarch64_macos;
-        return null;
+        return TargetMap.get(input);
     }
 };
 
@@ -75,7 +72,7 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
-    // flags para 'release'
+    // flags for 'release'
     const is_tty = r_checker.is_TTY();
     var color = is_tty;
 
@@ -87,7 +84,7 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
 
     while (args.next()) |flag| {
         if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
-            helps.helpOf("release", &.{"-h, --help"}, &.{"compiles multi-target and places correctly named binaries in dist/"});
+            helps.helpOf("release", &.{ "-h, --help", "--no-color" }, &.{ "compiles multi-target and places correctly named binaries in dist/", "disables color elements and animations" });
             return;
         }
 
@@ -101,87 +98,106 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
         return;
     }
 
-    var dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
-    defer dir.close();
+    // These words are used in some places, it is preferable to create them first to avoid rewriting
+    const ERROR = try fmt.red(alloc, "ERROR", is_tty);
+    defer alloc.free(ERROR);
 
-    const toml_path = "zemit.toml";
+    const OK = try fmt.green(alloc, "✓", is_tty);
+    defer alloc.free(OK);
 
+    const toml_path = "zemit.toml"; // hardcoded for now
     const config_parsed = reader.load(alloc, toml_path) catch |err| {
-        std.log.err("ERROR: Failed to parse '{s}', check the syntaxe", .{toml_path});
+        std.log.err("{s}: Failed to parse '{s}', check the syntaxe", .{ ERROR, toml_path });
         return err;
     };
     defer config_parsed.deinit(); // This cleans up the arena allocator
 
-    const target_strings = config_parsed.value.release.targets orelse blk: {
-        try stdout.print("Falling back to default architectures...\n", .{});
-        const defaults = std.enums.values(Architectures);
+    const dist = config_parsed.value.dist;
 
-        var arch_strings = try std.ArrayList([]const u8).initCapacity(alloc, defaults.len);
-        for (defaults) |arch| {
-            arch_strings.appendAssumeCapacity(arch.asString());
+    const output_dir = try std.mem.Allocator.dupe(alloc, u8, dist.dir);
+    defer alloc.free(output_dir);
+
+    const archs = config_parsed.value.release.targets;
+
+    if (archs.len == 0) {
+        try stderr.print("{s}: The architectures list described in 'zemit.toml' cannot be empty.\n", .{ERROR});
+        return;
+    }
+
+    for (archs) |target_str| {
+        if (target_str.len == 0) {
+            try stderr.print("{s}: The architecture described in 'zemit.toml' cannot be empty.\n", .{ERROR});
+            return;
         }
 
-        break :blk try arch_strings.toOwnedSlice();
-    };
-
-    var archs = std.ArrayList(Architectures).init(alloc);
-    defer archs.deinit();
-
-    for (target_strings) |target_str| {
-        const arch = Architectures.fromString(target_str) orelse {
-            try stderr.print("Unknown architecture: '{s}'\n", .{target_str});
+        if (!Architectures.exists(target_str)) {
+            try stderr.print("{s}: Unknown architecture: '{s}'\n", .{ ERROR, target_str });
             return;
-        };
-        try archs.append(arch);
+        }
     }
 
-    if (archs.items.len == 0) {
-        try stderr.print("ERROR: No valid target architectures found. Check your zemit.toml configuration.\n", .{});
+    if (archs.len == 0) {
+        try stderr.print("{s}: No valid target architectures found. Check your zemit.toml configuration.\n", .{ERROR});
         return;
     }
 
-    if (!(try utils.is_valid_project(alloc, dir))) {
-        try stderr.print("ERROR: you are not in a valid zig project (project generated via `zig init`)\n", .{});
+    var current_directory = try std.fs.cwd().openDir(".", .{ .iterate = true });
+    defer current_directory.close();
+
+    if (!(try utils.is_valid_project(alloc, current_directory))) {
+        try stderr.print("{s}: you are not in a valid zig project (project generated via `zig init`)\n", .{ERROR});
         return;
     }
 
-    std.fs.cwd().makePath(".zemit/dist") catch |err| switch (err) {
+    std.fs.cwd().makePath(output_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
 
-    const dist_dir_path = try dir.realpathAlloc(alloc, ".zemit/dist");
+    const dist_dir_path = try current_directory.realpathAlloc(alloc, output_dir);
     defer alloc.free(dist_dir_path);
 
-    const full_path_dir = try dir.realpathAlloc(alloc, ".");
+    const full_path_dir = try current_directory.realpathAlloc(alloc, ".");
     defer alloc.free(full_path_dir);
 
-    const total = archs.items.len;
+    const total = archs.len;
     const bin_name = std.fs.path.basename(full_path_dir);
 
-    try stdout.print("\nStarting release for {d} targets...\n\n", .{total});
+    const total_as_str = try std.fmt.allocPrint(alloc, "{d}", .{total});
+    const a = try fmt.cyan(alloc, total_as_str, is_tty);
+
+    defer {
+        alloc.free(total_as_str);
+        alloc.free(a);
+    }
+
+    const d_optimize = config_parsed.value.build.optimize;
+    const zig_args = config_parsed.value.build.zig_args;
+
+    try stdout.print("\nStarting release for {s} targets...\n\n", .{a});
+
     var build_timer = try std.time.Timer.start();
+    for (1.., archs) |i, architecture| {
+        const arch = Architectures.fromString(architecture) orelse {
+            try stderr.print("{s}: Unknown architecture: '{s}'\n", .{ ERROR, architecture });
+            return;
+        };
 
-    for (1.., archs.items) |i, architecture| {
-        const exit_code = runner.compile_and_move(alloc, architecture, dist_dir_path, bin_name, version, verbose, i, total, color) catch return;
-
+        const exit_code = runner.compile_and_move(alloc, arch, dist_dir_path, bin_name, version, d_optimize, zig_args, verbose, i, total, color) catch return;
         switch (exit_code) {
             .Exited => |code| {
                 if (code != 0) {
-                    try stderr.print("ERROR: We were unable to compile your binary for '{s}'. exit code: {}\n", .{ architecture.asString(), code });
+                    try stderr.print("{s}: We were unable to compile your binary for '{s}'. exit code: {}\n", .{ ERROR, arch.asString(), code });
                     return;
                 }
             },
             .Signal, .Stopped, .Unknown => {
-                try stderr.print("ERROR: Build process for '{s}' stopped or failed.\n", .{architecture.asString()});
+                try stderr.print("{s}: Build process for '{s}' stopped or failed.\n", .{ ERROR, arch.asString() });
                 return;
             },
         }
     }
     const elapsed_ns = build_timer.read();
-
-    const ok = try fmt.green(alloc, "✓", is_tty);
-    defer alloc.free(ok);
 
     const raw_dur = try fmt.fmt_duration(alloc, elapsed_ns);
     defer alloc.free(raw_dur);
@@ -190,8 +206,13 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     defer alloc.free(dur);
 
     if (verbose) {
-        try stdout.print("{s} Compilation completed! Binaries in: {s} {s}\n", .{ ok, dist_dir_path, dur });
+        try stdout.print("{s} Compilation completed! Binaries in: {s} {s}\n", .{ OK, dist_dir_path, dur });
     } else {
-        try stdout.print("\n{s} Compilation completed! Binaries in: {s} {s}\n", .{ ok, dist_dir_path, dur });
+        try stdout.print("\n{s} Compilation completed! Binaries in: {s} {s}\n", .{ OK, dist_dir_path, dur });
+    }
+
+    if (std.io.getStdOut().supportsAnsiEscapeCodes()) {
+        var bw = std.io.bufferedWriter(std.io.getStdOut().writer());
+        try bw.flush();
     }
 }
