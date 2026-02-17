@@ -3,7 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    // const strip_opt = b.option(bool, "strip", "Strip debug symbols") orelse false;
+    const strip_opt = b.option(bool, "strip", "Strip debug symbols") orelse false;
 
     const exe = b.addExecutable(.{
         .name = "zemit",
@@ -11,10 +11,19 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    // exe.root_module.strip = strip_opt;
-    // exe.link_gc_sections = true;
-    // exe.link_function_sections = true;
-    // exe.link_data_sections = true;
+
+    exe.root_module.strip = strip_opt;
+    exe.link_gc_sections = true;
+    exe.link_function_sections = true;
+    exe.link_data_sections = true;
+
+    const toml_dep = b.dependency("zig-toml", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe.root_module.addImport("toml", toml_dep.module("zig-toml"));
+    b.installArtifact(exe);
 
     const opts = b.addOptions();
     opts.addOption([]const u8, "zemit_version", "0.1.2");

@@ -3,6 +3,7 @@ const std = @import("std");
 // internals
 const checker = @import("../../../utils/checkers.zig");
 const r_checker = @import("./release_utils/release_checkers.zig");
+const reader = @import("../../../customization/config_reader.zig");
 
 // release utils
 const utils = @import("./release_utils/release_checkers.zig");
@@ -52,6 +53,22 @@ pub const Architectures = enum {
             .aarch64_macos => "aarch64-macos",
         };
     }
+
+    pub fn fromString(input: []const u8) ?Architectures {
+        if (std.mem.eql(u8, input, "x86_64-linux-gnu")) return .x86_64_linux_gnu;
+        if (std.mem.eql(u8, input, "x86_64-linux-musl")) return .x86_64_linux_musl;
+        if (std.mem.eql(u8, input, "aarch64-linux-gnu")) return .aarch64_linux_gnu;
+        if (std.mem.eql(u8, input, "aarch64-linux-musl")) return .aarch64_linux_musl;
+        if (std.mem.eql(u8, input, "arm-linux-gnueabihf")) return .arm_linux_gnueabihf;
+        if (std.mem.eql(u8, input, "arm-linux-musleabihf")) return .arm_linux_musleabihf;
+        if (std.mem.eql(u8, input, "riscv64-linux-gnu")) return .riscv64_linux_gnu;
+        if (std.mem.eql(u8, input, "riscv64-linux-musl")) return .riscv64_linux_musl;
+        if (std.mem.eql(u8, input, "x86_64-windows-gnu")) return .x86_64_windows_gnu;
+        if (std.mem.eql(u8, input, "x86_64-windows-msvc")) return .x86_64_windows_msvc;
+        if (std.mem.eql(u8, input, "x86_64-macos")) return .x86_64_macos;
+        if (std.mem.eql(u8, input, "aarch64-macos")) return .aarch64_macos;
+        return null;
+    }
 };
 
 pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version: []const u8, verbose: bool) !void {
@@ -87,6 +104,42 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     var dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
     defer dir.close();
 
+    const toml_path = "zemit.toml";
+
+    const config_parsed = reader.load(alloc, toml_path) catch |err| {
+        std.log.err("ERROR: Failed to parse '{s}', check the syntaxe", .{toml_path});
+        return err;
+    };
+    defer config_parsed.deinit(); // This cleans up the arena allocator
+
+    const target_strings = config_parsed.value.release.targets orelse blk: {
+        try stdout.print("Falling back to default architectures...\n", .{});
+        const defaults = std.enums.values(Architectures);
+
+        var arch_strings = try std.ArrayList([]const u8).initCapacity(alloc, defaults.len);
+        for (defaults) |arch| {
+            arch_strings.appendAssumeCapacity(arch.asString());
+        }
+
+        break :blk try arch_strings.toOwnedSlice();
+    };
+
+    var archs = std.ArrayList(Architectures).init(alloc);
+    defer archs.deinit();
+
+    for (target_strings) |target_str| {
+        const arch = Architectures.fromString(target_str) orelse {
+            try stderr.print("Unknown architecture: '{s}'\n", .{target_str});
+            return;
+        };
+        try archs.append(arch);
+    }
+
+    if (archs.items.len == 0) {
+        try stderr.print("ERROR: No valid target architectures found. Check your zemit.toml configuration.\n", .{});
+        return;
+    }
+
     if (!(try utils.is_valid_project(alloc, dir))) {
         try stderr.print("ERROR: you are not in a valid zig project (project generated via `zig init`)\n", .{});
         return;
@@ -103,14 +156,13 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     const full_path_dir = try dir.realpathAlloc(alloc, ".");
     defer alloc.free(full_path_dir);
 
-    const total = std.enums.values(Architectures).len;
-
+    const total = archs.items.len;
     const bin_name = std.fs.path.basename(full_path_dir);
 
     try stdout.print("\nStarting release for {d} targets...\n\n", .{total});
     var build_timer = try std.time.Timer.start();
 
-    for (1.., std.enums.values(Architectures)) |i, architecture| {
+    for (1.., archs.items) |i, architecture| {
         const exit_code = runner.compile_and_move(alloc, architecture, dist_dir_path, bin_name, version, verbose, i, total, color) catch return;
 
         switch (exit_code) {
