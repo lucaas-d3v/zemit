@@ -113,6 +113,42 @@ and design principles described below.
 
 ---
 
+## Branching model
+
+zemit uses a simple and explicit branching model designed to scale from
+solo development to multiple contributors.
+
+### Permanent branches
+
+- `main`
+  - Always stable
+  - Must always represent a releasable state
+  - No direct development
+
+- `dev`
+  - Integration branch
+  - Features and fixes are merged here first
+  - May be temporarily unstable
+
+### Working branches
+
+All work must be done in short-lived branches created from `dev`.
+
+Naming convention:
+
+- `feat/<short-description>`
+- `fix/<short-description>`
+- `docs/<short-description>`
+- `refactor/<short-description>`
+- `chore/<short-description>`
+
+Examples:
+
+- `feat/init-command`
+- `fix/toml-parser`
+- `refactor/cli-layout`
+
+---
 ## Design principles
 
 ### Explicit over implicit
