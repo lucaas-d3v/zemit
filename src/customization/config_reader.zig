@@ -24,7 +24,7 @@ pub const Release = struct {
 };
 
 pub const Dist = struct {
-    dir: []const u8 = ".zemit/dist",
+    dir: []const u8 = "zemit/docs",
     layout: []const u8 = "by_target",
     name_template: []const u8 = "{bin}-{version}-{target}{ext}",
 };

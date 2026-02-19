@@ -109,7 +109,7 @@ See [`config.md`](config.md) for the full configuration reference.
 [1/3] x86_64-linux-gnu ok (0.48s)
 [2/3] x86_64-linux-musl ok (0.51s)
 [3/3] x86_64-windows-gnu ok (1.12s)
-✓ Compilation completed! Binaries in .zemit/dist (2.11s)
+✓ Compilation completed! Binaries in zemit/docs (2.11s)
 ```
 
 ---
