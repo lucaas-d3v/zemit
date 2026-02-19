@@ -9,6 +9,7 @@ const checker = @import("../utils/checkers.zig");
 const helps = @import("./commands/generics/help_command.zig");
 const version = @import("./commands/generics/version.zig");
 const release = @import("./commands/release/release.zig");
+const clean = @import("./commands/clean/clean.zig");
 
 pub fn cli(alloc: std.mem.Allocator) !void {
     var args = try std.process.argsWithAllocator(alloc);
@@ -22,7 +23,7 @@ pub fn cli(alloc: std.mem.Allocator) !void {
     // global flags
     while (args.next()) |arg| {
         if (checker.cli_args_equals(arg, &.{ "-h", "--help" })) {
-            helps.help();
+            helps.help(alloc);
             return;
         }
 
@@ -41,7 +42,7 @@ pub fn cli(alloc: std.mem.Allocator) !void {
     }
 
     const cmd = command orelse {
-        helps.help();
+        helps.help(alloc);
         return;
     };
 
@@ -51,7 +52,12 @@ pub fn cli(alloc: std.mem.Allocator) !void {
         return;
     }
 
-    helps.help();
+    if (checker.str_equals(cmd, "clean")) {
+        try clean.clean(alloc, &args, "zemit.toml", verbose);
+        return;
+    }
+
+    helps.help(alloc);
     const stderr = std.io.getStdErr().writer();
     try stderr.print("\nError: Unknown command '{s}'\n", .{cmd});
 }

@@ -7,6 +7,7 @@ zig_args = ["-Dstrip=true"]
 [release]
 targets = [
     "x86_64-linux-gnu",
+    "x86_64-macos",
     "x86_64-linux-musl",
     "aarch64-linux-gnu",
     "aarch64-linux-musl",
@@ -16,12 +17,11 @@ targets = [
     "riscv64-linux-musl",
     "x86_64-windows-gnu",
     "x86_64-windows-msvc",
-    "x86_64-macos",
     "aarch64-macos",
 ]
 
 [dist]
-dir = ".zemit/dist"
+dir = "zig-out_/dist"
 layout = "by_target"
 name_template = "{bin}-{version}-{target}{ext}"
 

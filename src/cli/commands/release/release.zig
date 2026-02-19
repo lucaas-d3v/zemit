@@ -2,100 +2,30 @@ const std = @import("std");
 
 // internals
 const checker = @import("../../../utils/checkers.zig");
-const r_checker = @import("./release_utils/release_checkers.zig");
+const utils_release = @import("../../../utils/checkers.zig");
 const reader = @import("../../../customization/config_reader.zig");
 
 // release utils
-const utils = @import("./release_utils/release_checkers.zig");
-const runner = @import("./release_utils/release_runners.zig");
+const release_checker = @import("./release_utils/release_checkers.zig");
+const release_runner = @import("./release_utils/release_runners.zig");
+const release_enums = @import("./release_utils/release_enums.zig");
 
 // commands
 const helps = @import("../generics/help_command.zig");
 const fmt = @import("../../../utils/stdout_formatter.zig");
-
-const TargetMap = std.StaticStringMap(Architectures).initComptime(blk: {
-    const fields = @typeInfo(Architectures).Enum.fields;
-    var pairs: [fields.len]struct { []const u8, Architectures } = undefined;
-    for (fields, 0..) |field, i| {
-        const enum_val: Architectures = @enumFromInt(field.value);
-        pairs[i] = .{ enum_val.asString(), enum_val };
-    }
-    break :blk pairs;
-});
-
-pub const Architectures = enum {
-    x86_64_linux_gnu,
-    x86_64_linux_musl,
-
-    aarch64_linux_gnu,
-    aarch64_linux_musl,
-
-    arm_linux_gnueabihf,
-    arm_linux_musleabihf,
-
-    riscv64_linux_gnu,
-    riscv64_linux_musl,
-
-    x86_64_windows_gnu,
-    x86_64_windows_msvc,
-
-    x86_64_macos,
-    aarch64_macos,
-
-    pub fn asString(self: Architectures) []const u8 {
-        return switch (self) {
-            .x86_64_linux_gnu => "x86_64-linux-gnu",
-            .x86_64_linux_musl => "x86_64-linux-musl",
-            .aarch64_linux_gnu => "aarch64-linux-gnu",
-            .aarch64_linux_musl => "aarch64-linux-musl",
-            .arm_linux_gnueabihf => "arm-linux-gnueabihf",
-            .arm_linux_musleabihf => "arm-linux-musleabihf",
-            .riscv64_linux_gnu => "riscv64-linux-gnu",
-            .riscv64_linux_musl => "riscv64-linux-musl",
-            .x86_64_windows_gnu => "x86_64-windows-gnu",
-            .x86_64_windows_msvc => "x86_64-windows-msvc",
-            .x86_64_macos => "x86_64-macos",
-            .aarch64_macos => "aarch64-macos",
-        };
-    }
-
-    pub fn exists(name: []const u8) bool {
-        return TargetMap.has(name);
-    }
-
-    pub fn fromString(input: []const u8) ?Architectures {
-        return TargetMap.get(input);
-    }
-};
 
 pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version: []const u8, verbose: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
     // flags for 'release'
-    const is_tty = r_checker.is_TTY();
+    const is_tty = utils_release.is_TTY();
     var color = is_tty;
 
     const env_no_color = std.process.getEnvVarOwned(alloc, "NO_COLOR") catch null;
     if (env_no_color) |val| {
         defer alloc.free(val);
         color = false;
-    }
-
-    while (args.next()) |flag| {
-        if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
-            helps.helpOf("release", &.{ "-h, --help", "--no-color" }, &.{ "compiles multi-target and places correctly named binaries in dist/", "disables color elements and animations" });
-            return;
-        }
-
-        if (checker.cli_args_equals(flag, &.{"--no-color"})) {
-            color = false;
-            continue;
-        }
-
-        helps.helpOf("release", &.{"-h, --help"}, &.{"compiles multi-target and places correctly named binaries in dist/"});
-        try stderr.print("\nUnknown flag for command release: '{s}'\n", .{flag});
-        return;
     }
 
     // These words are used in some places, it is preferable to create them first to avoid rewriting
@@ -111,6 +41,25 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
         return err;
     };
     defer config_parsed.deinit(); // This cleans up the arena allocator
+
+    const path = try std.fmt.allocPrint(alloc, "       Compiles multi-target and places correctly named binaries in '{s}'", .{config_parsed.value.dist.dir});
+
+    while (args.next()) |flag| {
+        if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
+            helps.helpOf("release", &.{ "", "-h, --help", "--no-color" }, &.{ path, "Show this help log", "Disables color elements and animations" });
+            return;
+        }
+
+        if (checker.cli_args_equals(flag, &.{"--no-color"})) {
+            color = false;
+            continue;
+        }
+
+        helps.helpOf("release", &.{ "", "-h, --help", "--no-color" }, &.{ path, "Show this help log", "Disables color elements and animations" });
+        try stderr.print("\nUnknown flag for command release: '{s}'\nUse -h or --help to see options.\n", .{flag});
+        return;
+    }
+    alloc.free(path);
 
     const dist = config_parsed.value.dist;
 
@@ -130,7 +79,7 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
             return;
         }
 
-        if (!Architectures.exists(target_str)) {
+        if (!release_enums.Architectures.exists(target_str)) {
             try stderr.print("{s}: Unknown architecture: '{s}'\n", .{ ERROR, target_str });
             return;
         }
@@ -144,7 +93,7 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     var current_directory = try std.fs.cwd().openDir(".", .{ .iterate = true });
     defer current_directory.close();
 
-    if (!(try utils.is_valid_project(alloc, current_directory))) {
+    if (!(try release_checker.is_valid_project(alloc, current_directory))) {
         try stderr.print("{s}: you are not in a valid zig project (project generated via `zig init`)\n", .{ERROR});
         return;
     }
@@ -163,27 +112,47 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     const total = archs.len;
     const bin_name = std.fs.path.basename(full_path_dir);
 
-    const total_as_str = try std.fmt.allocPrint(alloc, "{d}", .{total});
-    const a = try fmt.cyan(alloc, total_as_str, is_tty);
-
-    defer {
-        alloc.free(total_as_str);
-        alloc.free(a);
-    }
-
     const d_optimize = config_parsed.value.build.optimize;
     const zig_args = config_parsed.value.build.zig_args;
 
-    try stdout.print("\nStarting release for {s} targets...\n\n", .{a});
+    if (color) {
+        const total_as_str = try std.fmt.allocPrint(alloc, "{d}", .{total});
+        const a = try fmt.cyan(alloc, total_as_str, is_tty);
+
+        defer {
+            alloc.free(total_as_str);
+            alloc.free(a);
+        }
+
+        try stdout.print("\nStarting release for {s} targets...\n\n", .{a});
+    } else {
+        try stdout.print("\nStarting release for {d} targets...\n\n", .{total});
+    }
+
+    var general_release_ctx = release_enums.ReleaseCtx{
+        .alloc = alloc,
+        .architecture = release_enums.Architectures.none,
+        .bin_name = bin_name,
+        .color = color,
+        .d_optimize = d_optimize,
+        .out_path = dist_dir_path,
+        .full_path = "",
+        .version = version,
+        .verbose = verbose,
+        .total = total,
+        .zig_args = zig_args,
+    };
 
     var build_timer = try std.time.Timer.start();
     for (1.., archs) |i, architecture| {
-        const arch = Architectures.fromString(architecture) orelse {
+        const arch = release_enums.Architectures.fromString(architecture) orelse {
             try stderr.print("{s}: Unknown architecture: '{s}'\n", .{ ERROR, architecture });
             return;
         };
 
-        const exit_code = runner.compile_and_move(alloc, arch, dist_dir_path, bin_name, version, d_optimize, zig_args, verbose, i, total, color) catch return;
+        general_release_ctx.architecture = arch;
+
+        const exit_code = release_runner.compile_and_move(&general_release_ctx, i) catch return;
         switch (exit_code) {
             .Exited => |code| {
                 if (code != 0) {
@@ -199,7 +168,7 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     }
     const elapsed_ns = build_timer.read();
 
-    const raw_dur = try fmt.fmt_duration(alloc, elapsed_ns);
+    const raw_dur = try fmt.fmt_pure_duration(alloc, elapsed_ns);
     defer alloc.free(raw_dur);
 
     const dur = try fmt.gray(alloc, raw_dur, color);

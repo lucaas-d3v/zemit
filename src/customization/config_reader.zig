@@ -2,7 +2,7 @@ const std = @import("std");
 const toml = @import("toml");
 
 pub const Build = struct {
-    optimize: []const u8 = "ReleaseSmall", // Valor padrão aqui!
+    optimize: []const u8 = "ReleaseSmall",
     zig_args: []const []const u8 = &.{},
 };
 

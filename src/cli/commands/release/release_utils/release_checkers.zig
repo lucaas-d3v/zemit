@@ -1,6 +1,8 @@
 const std = @import("std");
 
 // internals
+const utils = @import("../../../../utils/checkers.zig");
+
 const ValidProject = struct {
     build_zig: bool,
     zon_build_zig: bool,
@@ -29,14 +31,14 @@ pub fn is_valid_project(alloc: std.mem.Allocator, dir: std.fs.Dir) !bool {
     const zon_build_zig_file = try std.fmt.allocPrint(alloc, "{s}{c}build.zig.zon", .{ full_path_dir, sep });
     defer alloc.free(zon_build_zig_file);
 
-    if (file_exists(dir, build_zig_file)) {
+    if (utils.file_exists(dir, build_zig_file)) {
         valid_p.build_zig = true;
     } else {
         try stdout.print("Info: build.zig não encontrado em {s}\n", .{full_path_dir});
         return false;
     }
 
-    if (file_exists(dir, zon_build_zig_file)) {
+    if (utils.file_exists(dir, zon_build_zig_file)) {
         valid_p.zon_build_zig = true;
     } else {
         try stdout.print("Info: build.zig.zon não encontrado.\n", .{});
@@ -44,16 +46,4 @@ pub fn is_valid_project(alloc: std.mem.Allocator, dir: std.fs.Dir) !bool {
     }
 
     return valid_p.is_valid();
-}
-
-fn file_exists(dir: std.fs.Dir, file_path: []const u8) bool {
-    dir.access(file_path, .{}) catch |err| {
-        if (err == error.FileNotFound) return false;
-        return false;
-    };
-    return true;
-}
-
-pub fn is_TTY() bool {
-    return std.posix.isatty(std.io.getStdOut().handle);
 }
