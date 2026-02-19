@@ -46,7 +46,6 @@ pub fn is_TTY() bool {
 }
 
 // utils
-
 fn reverse_str(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const result = try allocator.alloc(u8, input.len);
 

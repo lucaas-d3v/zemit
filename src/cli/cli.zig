@@ -4,6 +4,7 @@ const build_options = @import("build_options");
 
 // internals
 const checker = @import("../utils/checkers.zig");
+const generals_enums = @import("../utils/general_enums.zig");
 
 // commands
 const helps = @import("./commands/generics/help_command.zig");
@@ -48,7 +49,19 @@ pub fn cli(alloc: std.mem.Allocator) !void {
 
     // dispatch
     if (checker.str_equals(cmd, "release")) {
-        try release.release(alloc, &args, build_options.zemit_version, verbose);
+        const io = generals_enums.Io{
+            .stdout = std.io.getStdOut().writer().any(),
+            .stderr = std.io.getStdErr().writer().any(),
+        };
+        release.release(alloc, io, &args, build_options.zemit_version, verbose) catch |err| {
+            switch (err) {
+                error.InvalidConfig => try io.stderr.print("Check your zemit.toml.\n", .{}),
+                else => {},
+            }
+
+            return;
+        };
+
         return;
     }
 

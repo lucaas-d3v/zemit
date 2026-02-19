@@ -7,21 +7,21 @@ zig_args = ["-Dstrip=true"]
 [release]
 targets = [
     "x86_64-linux-gnu",
-    "x86_64-macos",
-    "x86_64-linux-musl",
-    "aarch64-linux-gnu",
-    "aarch64-linux-musl",
-    "arm-linux-gnueabihf",
-    "arm-linux-musleabihf",
-    "riscv64-linux-gnu",
-    "riscv64-linux-musl",
-    "x86_64-windows-gnu",
-    "x86_64-windows-msvc",
-    "aarch64-macos",
+    #     "x86_64-macos",
+    #     "x86_64-linux-musl",
+    #     "aarch64-linux-gnu",
+    #     "aarch64-linux-musl",
+    #     "arm-linux-gnueabihf",
+    #     "arm-linux-musleabihf",
+    #     "riscv64-linux-gnu",
+    #     "riscv64-linux-musl",
+    #     "x86_64-windows-gnu",
+    #     "x86_64-windows-msvc",
+    #     "aarch64-macos",
 ]
 
 [dist]
-dir = "zig-out_/dist"
+dir = "zig-out/dist"
 layout = "by_target"
 name_template = "{bin}-{version}-{target}{ext}"
 

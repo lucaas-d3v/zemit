@@ -116,3 +116,14 @@ pub const IoCtx = struct {
     dest_bin: []const u8,
     stderr: std.io.AnyWriter,
 };
+
+pub const DistDirError = error{
+    Empty,
+    Dot,
+    AbsolutePath,
+    Traversal,
+    ZigOut,
+    TildeNotAllowed,
+    InvalidByte,
+    BackslashNotAllowed,
+};

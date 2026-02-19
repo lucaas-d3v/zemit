@@ -4,6 +4,7 @@ const std = @import("std");
 const checker = @import("../../../utils/checkers.zig");
 const utils_release = @import("../../../utils/checkers.zig");
 const reader = @import("../../../customization/config_reader.zig");
+const generals_enums = @import("../../../utils/general_enums.zig");
 
 // release utils
 const release_checker = @import("./release_utils/release_checkers.zig");
@@ -14,9 +15,9 @@ const release_enums = @import("./release_utils/release_enums.zig");
 const helps = @import("../generics/help_command.zig");
 const fmt = @import("../../../utils/stdout_formatter.zig");
 
-pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version: []const u8, verbose: bool) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.process.ArgIterator, version: []const u8, verbose: bool) !void {
+    const stdout = io_stds.stdout;
+    const stderr = io_stds.stderr;
 
     // flags for 'release'
     const is_tty = utils_release.is_TTY();
@@ -29,21 +30,20 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     }
 
     // These words are used in some places, it is preferable to create them first to avoid rewriting
-    const ERROR = try fmt.red(alloc, "ERROR", is_tty);
-    defer alloc.free(ERROR);
+    const error_fmt = try fmt.red(alloc, "ERROR", color);
+    defer alloc.free(error_fmt);
 
-    const OK = try fmt.green(alloc, "✓", is_tty);
-    defer alloc.free(OK);
+    const ok_fmt = try fmt.green(alloc, "✓", color);
+    defer alloc.free(ok_fmt);
 
     const toml_path = "zemit.toml"; // hardcoded for now
     const config_parsed = reader.load(alloc, toml_path) catch |err| {
-        std.log.err("{s}: Failed to parse '{s}', check the syntaxe", .{ ERROR, toml_path });
+        std.log.err("{s}: Failed to parse '{s}', check the syntaxe", .{ error_fmt, toml_path });
         return err;
     };
     defer config_parsed.deinit(); // This cleans up the arena allocator
 
     const path = try std.fmt.allocPrint(alloc, "       Compiles multi-target and places correctly named binaries in '{s}'", .{config_parsed.value.dist.dir});
-
     while (args.next()) |flag| {
         if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
             helps.helpOf("release", &.{ "", "-h, --help", "--no-color" }, &.{ path, "Show this help log", "Disables color elements and animations" });
@@ -66,27 +66,41 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     const output_dir = try std.mem.Allocator.dupe(alloc, u8, dist.dir);
     defer alloc.free(output_dir);
 
+    validate_dist_dir(output_dir) catch |err| {
+        switch (err) {
+            error.Empty => try stderr.print("{s}: dist.dir cannot be empty.\n", .{error_fmt}),
+            error.Dot => try stderr.print("{s}: dist.dir cannot be '.' or './'. Choose a subdirectory.\n", .{error_fmt}),
+            error.AbsolutePath => try stderr.print("{s}: dist.dir must be a relative path (absolute paths are not allowed).\n", .{error_fmt}),
+            error.Traversal => try stderr.print("{s}: dist.dir cannot contain '..' path traversal.\n", .{error_fmt}),
+            error.ZigOut => try stderr.print("{s}: dist.dir cannot be 'zig-out'. Use 'zig-out/<folder>'.\n", .{error_fmt}),
+            error.TildeNotAllowed => try stderr.print("{s}: dist.dir cannot start with '~'. Use a relative path.\n", .{error_fmt}),
+            error.BackslashNotAllowed => try stderr.print("{s}: dist.dir cannot contain '\\\\'. Use '/' separators.\n", .{error_fmt}),
+            error.InvalidByte => try stderr.print("{s}: dist.dir contains invalid characters.\n", .{error_fmt}),
+        }
+        return error.InvalidConfig;
+    };
+
     const archs = config_parsed.value.release.targets;
 
     if (archs.len == 0) {
-        try stderr.print("{s}: The architectures list described in 'zemit.toml' cannot be empty.\n", .{ERROR});
+        try stderr.print("{s}: The architectures list described in 'zemit.toml' cannot be empty.\n", .{error_fmt});
         return;
     }
 
     for (archs) |target_str| {
         if (target_str.len == 0) {
-            try stderr.print("{s}: The architecture described in 'zemit.toml' cannot be empty.\n", .{ERROR});
+            try stderr.print("{s}: The architecture described in 'zemit.toml' cannot be empty.\n", .{error_fmt});
             return;
         }
 
         if (!release_enums.Architectures.exists(target_str)) {
-            try stderr.print("{s}: Unknown architecture: '{s}'\n", .{ ERROR, target_str });
+            try stderr.print("{s}: Unknown architecture: '{s}'\n", .{ error_fmt, target_str });
             return;
         }
     }
 
     if (archs.len == 0) {
-        try stderr.print("{s}: No valid target architectures found. Check your zemit.toml configuration.\n", .{ERROR});
+        try stderr.print("{s}: No valid target architectures found. Check your zemit.toml configuration.\n", .{error_fmt});
         return;
     }
 
@@ -94,7 +108,7 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     defer current_directory.close();
 
     if (!(try release_checker.is_valid_project(alloc, current_directory))) {
-        try stderr.print("{s}: you are not in a valid zig project (project generated via `zig init`)\n", .{ERROR});
+        try stderr.print("{s}: you are not in a valid zig project (project generated via `zig init`)\n", .{error_fmt});
         return;
     }
 
@@ -146,7 +160,7 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     var build_timer = try std.time.Timer.start();
     for (1.., archs) |i, architecture| {
         const arch = release_enums.Architectures.fromString(architecture) orelse {
-            try stderr.print("{s}: Unknown architecture: '{s}'\n", .{ ERROR, architecture });
+            try stderr.print("{s}: Unknown architecture: '{s}'\n", .{ error_fmt, architecture });
             return;
         };
 
@@ -156,12 +170,12 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
         switch (exit_code) {
             .Exited => |code| {
                 if (code != 0) {
-                    try stderr.print("{s}: We were unable to compile your binary for '{s}'. exit code: {}\n", .{ ERROR, arch.asString(), code });
+                    try stderr.print("{s}: We were unable to compile your binary for '{s}'. exit code: {}\n", .{ error_fmt, arch.asString(), code });
                     return;
                 }
             },
             .Signal, .Stopped, .Unknown => {
-                try stderr.print("{s}: Build process for '{s}' stopped or failed.\n", .{ ERROR, arch.asString() });
+                try stderr.print("{s}: Build process for '{s}' stopped or failed.\n", .{ error_fmt, arch.asString() });
                 return;
             },
         }
@@ -175,13 +189,64 @@ pub fn release(alloc: std.mem.Allocator, args: *std.process.ArgIterator, version
     defer alloc.free(dur);
 
     if (verbose) {
-        try stdout.print("{s} Compilation completed! Binaries in: {s} {s}\n", .{ OK, dist_dir_path, dur });
+        try stdout.print("{s} Compilation completed! Binaries in: {s} {s}\n", .{ ok_fmt, dist_dir_path, dur });
     } else {
-        try stdout.print("\n{s} Compilation completed! Binaries in: {s} {s}\n", .{ OK, dist_dir_path, dur });
+        try stdout.print("\n{s} Compilation completed! Binaries in: {s} {s}\n", .{ ok_fmt, dist_dir_path, dur });
     }
 
     if (std.io.getStdOut().supportsAnsiEscapeCodes()) {
         var bw = std.io.bufferedWriter(std.io.getStdOut().writer());
         try bw.flush();
     }
+}
+
+pub fn validate_dist_dir(dir: []const u8) release_enums.DistDirError!void {
+    if (dir.len == 0) return error.Empty;
+
+    // block NUL and weird bytes that can mess with OS APIs/logs
+    for (dir) |c| {
+        if (c == 0) return error.InvalidByte;
+    }
+
+    // common "current directory" forms
+    if (std.mem.eql(u8, dir, ".") or std.mem.eql(u8, dir, "./")) return error.Dot;
+
+    // reject "~" expansions (CLI tools shouldn't silently depend on shell expansion rules)
+    if (dir[0] == '~') return error.TildeNotAllowed;
+
+    // reject backslashes to avoid Windows-style confusion on *nix and path spoofing
+    if (std.mem.indexOfScalar(u8, dir, '\\') != null) return error.BackslashNotAllowed;
+
+    // absolute paths are dangerous for "clean" command
+    if (std.fs.path.isAbsolute(dir)) return error.AbsolutePath;
+
+    // normalize "zig-out" and "zig-out/" special case (your tool uses zig-out internally)
+    if (std.mem.eql(u8, dir, "zig-out") or std.mem.eql(u8, dir, "zig-out/")) return error.ZigOut;
+
+    // block any parent traversal:
+    // - ".."
+    // - "../x"
+    // - "x/.."
+    // - "x/../y"
+    if (containsDotDotSegment(dir)) return error.Traversal;
+
+    if (std.mem.indexOf(u8, dir, "//") != null) return error.InvalidByte;
+
+    if (dir[dir.len - 1] == ' ') return error.InvalidByte;
+}
+
+fn containsDotDotSegment(dir: []const u8) bool {
+    const sep = std.fs.path.sep;
+    var start: usize = 0;
+
+    while (start <= dir.len) {
+        const next = std.mem.indexOfScalarPos(u8, dir, start, sep) orelse dir.len;
+        const seg = dir[start..next];
+
+        if (seg.len == 2 and seg[0] == '.' and seg[1] == '.') return true;
+
+        if (next == dir.len) break;
+        start = next + 1;
+    }
+    return false;
 }
