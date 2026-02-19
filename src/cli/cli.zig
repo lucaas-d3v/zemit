@@ -4,20 +4,15 @@ const build_options = @import("build_options");
 
 // internals
 const checker = @import("../utils/checkers.zig");
+const generals_enums = @import("../utils/general_enums.zig");
 
 // commands
 const helps = @import("./commands/generics/help_command.zig");
 const version = @import("./commands/generics/version.zig");
 const release = @import("./commands/release/release.zig");
+const clean = @import("./commands/clean/clean.zig");
 
-pub fn cli() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer {
-        const leak_status = gpa.deinit();
-        if (leak_status == .leak) std.debug.print("Memory Leak detected!\n", .{});
-    }
-    const alloc = gpa.allocator();
-
+pub fn cli(alloc: std.mem.Allocator) !void {
     var args = try std.process.argsWithAllocator(alloc);
     defer args.deinit();
 
@@ -29,7 +24,7 @@ pub fn cli() !void {
     // global flags
     while (args.next()) |arg| {
         if (checker.cli_args_equals(arg, &.{ "-h", "--help" })) {
-            helps.help();
+            helps.help(alloc);
             return;
         }
 
@@ -48,19 +43,34 @@ pub fn cli() !void {
     }
 
     const cmd = command orelse {
-        helps.help();
+        helps.help(alloc);
         return;
     };
 
     // dispatch
     if (checker.str_equals(cmd, "release")) {
-        try release.release(alloc, &args, build_options.zemit_version, verbose);
+        const io = generals_enums.Io{
+            .stdout = std.io.getStdOut().writer().any(),
+            .stderr = std.io.getStdErr().writer().any(),
+        };
+        release.release(alloc, io, &args, build_options.zemit_version, verbose) catch |err| {
+            switch (err) {
+                error.InvalidConfig => try io.stderr.print("Check your zemit.toml.\n", .{}),
+                else => {},
+            }
+
+            return;
+        };
+
         return;
     }
 
-    helps.help();
+    if (checker.str_equals(cmd, "clean")) {
+        try clean.clean(alloc, &args, "zemit.toml", verbose);
+        return;
+    }
+
+    helps.help(alloc);
     const stderr = std.io.getStdErr().writer();
     try stderr.print("\nError: Unknown command '{s}'\n", .{cmd});
-
-    std.process.exit(1);
 }

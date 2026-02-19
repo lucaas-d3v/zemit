@@ -33,8 +33,19 @@ pub fn contais(allocator: std.mem.Allocator, str_a: []const u8, expected_str: []
     return false;
 }
 
-// utils
+pub fn file_exists(dir: std.fs.Dir, file_path: []const u8) bool {
+    dir.access(file_path, .{}) catch |err| {
+        if (err == error.FileNotFound) return false;
+        return false;
+    };
+    return true;
+}
 
+pub fn is_TTY() bool {
+    return std.posix.isatty(std.io.getStdOut().handle);
+}
+
+// utils
 fn reverse_str(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const result = try allocator.alloc(u8, input.len);
 

@@ -2,40 +2,42 @@
 
 Opinionated release automation tool for Zig projects.
 
-**zemit** aims to be the GoReleaser equivalent for the Zig ecosystem:
-a single tool to build, package, and publish multi-target releases
-in a predictable and reproducible way.
+**zemit** is a release automation CLI inspired by GoReleaser,
+but designed specifically for Zig’s build system and philosophy.
+
+Its goal is to provide a single, explicit, and reproducible way
+to build, package, and publish multi-target releases for Zig projects.
 
 ---
 
 ## What is zemit?
 
-zemit is a CLI tool that automates the **release pipeline** of Zig projects.
-
-Its goal is to handle, in one place:
+zemit automates the **release pipeline** of Zig projects, handling:
 
 - multi-target compilation
 - deterministic artifact naming
-- packaging (zip / tar.gz)
-- checksum generation
-- release metadata
-- publishing to GitHub, GitLab, and Codeberg
+- packaging (zip / tar.gz) - in the future
+- checksum generation - in the future
+- release metadata - in the future
+- publishing to Codeberg, GitHub and GitLab - in the future
 
-All while remaining explicit, scriptable, and transparent.
+All while remaining explicit, scriptable, and predictable.
+
+No hidden magic. No implicit side effects.
 
 ---
 
 ## Project status
 
-**Experimental — v0.1.x**
+**Experimental — v0.x**
 
 zemit is under active development.
 
-The core build pipeline is implemented and usable.
-Higher-level release features (checksums, compression, provider APIs)
-are planned and will be introduced incrementally.
+The core build pipeline is usable and stable enough for real projects,
+but higher-level release features (compression, checksums, provider APIs)
+are still evolving.
 
-Breaking changes may occur during the 0.x series.
+Breaking changes may occur until v1.0.
 
 ---
 
@@ -47,7 +49,7 @@ Breaking changes may occur during the 0.x series.
 
 ## Quick start
 
-Inside a Zig project generated via `zig init`:
+Inside a Zig project generated with `zig init`:
 
 ```bash
 zemit release
@@ -59,32 +61,55 @@ Verbose mode (full Zig output):
 zemit -v release
 ```
 
----
-
-## Current capabilities (v0.1.0)
-
-* Validate Zig project structure
-* Build binaries for multiple targets
-* Deterministic artifact naming
-* Clean and predictable output
-* TTY-aware UX (colors, spinners)
-
-Artifacts are written to:
+Artifacts are written by default in:
 
 ```text
-.zemit/dist/<target>/
+zemit/dist/
 ```
+
+---
+
+## Current capabilities
+
+* Optional `zemit.toml` configuration file
+* Configurable optimization mode
+* Custom Zig build arguments
+* Multi-target builds
+* Deterministic artifact naming
+* Clean, predictable output
+* TTY-aware UX (colors, spinners)
+
+Some configuration sections are currently placeholders and
+will be implemented incrementally.
+
+---
+
+## Example configuration
+
+```toml
+[build]
+optimize = "ReleaseSmall"
+zig_args = ["-Dstrip=true"]
+
+[release]
+targets = [
+  "x86_64-linux-gnu",
+  "x86_64-linux-musl",
+  "x86_64-windows-gnu",
+]
+```
+
+See [`config.md`](config.md) for the full configuration reference.
 
 ---
 
 ## Example output
 
 ```text
-[1/12] x86_64-linux-gnu ok (0.50s)
-[2/12] x86_64-linux-musl ok (0.50s)
-[3/12] aarch64-linux-gnu ok (3.00s)
-...
-✓ Compilation completed! Binaries in: .zemit/dist (31.02s)
+[1/3] x86_64-linux-gnu ok (0.48s)
+[2/3] x86_64-linux-musl ok (0.51s)
+[3/3] x86_64-windows-gnu ok (1.12s)
+✓ Compilation completed! Binaries in zemit/docs (2.11s)
 ```
 
 ---
@@ -92,16 +117,16 @@ Artifacts are written to:
 ## Output layout
 
 ```text
-.zemit/dist/x86_64-linux-musl/yourbin
-.zemit/dist/x86_64-windows-gnu/yourbin.exe
-.zemit/dist/aarch64-macos/yourbin
+zemit/dist/x86_64-linux-musl/yourbin
+zemit/dist/x86_64-windows-gnu/yourbin.exe
+zemit/dist/aarch64-macos/yourbin
 ```
 
 Binary names include version and target when applicable.
 
 ---
 
-## Supported targets (v0.1.0)
+## Supported targets
 
 * x86_64-linux-gnu
 * x86_64-linux-musl
@@ -120,7 +145,7 @@ Binary names include version and target when applicable.
 > Some targets may require host support or SDKs
 > (e.g. macOS SDK, MSVC toolchain).
 >
-> If a target fails, rerun:
+> If a target fails, rerun with:
 >
 > ```bash
 > zemit -v release
@@ -136,10 +161,8 @@ Planned features include:
 * Checksum generation (sha256)
 * GitHub / GitLab / Codeberg providers
 * Automatic release upload to tags
-* Config file (`zemit.toml`)
 * Selective target builds
 
-See `ROADMAP.md` for details.
 
 ---
 
@@ -188,11 +211,13 @@ zemit follows a pragmatic Unix-style philosophy:
 ## Repository
 
 Canonical repository:
-- https://codeberg.org/lucaas-d3v/zemit
+
+* [https://codeberg.org/lucaas-d3v/zemit](https://codeberg.org/lucaas-d3v/zemit)
 
 Mirrors:
-- https://github.com/lucaas-d3v/zemit
-- https://gitlab.com/lucaas-d3v/zemit
+
+* [https://github.com/lucaas-d3v/zemit](https://github.com/lucaas-d3v/zemit)
+* [https://gitlab.com/lucaas-d3v/zemit](https://gitlab.com/lucaas-d3v/zemit)
 
 ---
 
