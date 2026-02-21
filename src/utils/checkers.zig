@@ -67,8 +67,6 @@ const ValidProject = struct {
 };
 
 pub fn is_valid_project(alloc: std.mem.Allocator, dir: std.fs.Dir) !bool {
-    const stdout = std.io.getStdOut().writer();
-
     var valid_p = ValidProject{
         .build_zig = false,
         .zon_build_zig = false,
@@ -88,7 +86,6 @@ pub fn is_valid_project(alloc: std.mem.Allocator, dir: std.fs.Dir) !bool {
     if (file_exists(dir, build_zig_file)) {
         valid_p.build_zig = true;
     } else {
-        try stdout.print("Info: build.zig não encontrado em {s}\n", .{full_path_dir});
         return false;
     }
 
@@ -153,14 +150,14 @@ fn check_dir_rules(dir: []const u8) !void {
     // - "../x"
     // - "x/.."
     // - "x/../y"
-    if (containsDotDotSegment(dir)) return error.Traversal;
+    if (contains_dot_dot_segment(dir)) return error.Traversal;
 
     if (std.mem.indexOf(u8, dir, "//") != null) return error.InvalidByte;
 
     if (dir[dir.len - 1] == ' ') return error.InvalidByte;
 }
 
-fn containsDotDotSegment(dir: []const u8) bool {
+fn contains_dot_dot_segment(dir: []const u8) bool {
     const sep = std.fs.path.sep;
     var start: usize = 0;
 
@@ -174,4 +171,11 @@ fn containsDotDotSegment(dir: []const u8) bool {
         start = next + 1;
     }
     return false;
+}
+
+pub fn to_release_layout(layout: []const u8) release_enums.ReleaseLayout {
+    if (str_equals(layout, "by_target")) return release_enums.ReleaseLayout.BY_TARGET;
+    if (str_equals(layout, "flat")) return release_enums.ReleaseLayout.FLAT;
+
+    return release_enums.ReleaseLayout.none;
 }

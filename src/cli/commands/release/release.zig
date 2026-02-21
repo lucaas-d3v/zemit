@@ -32,6 +32,13 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
     };
     defer config_parsed.deinit(); // This cleans up the arena allocator
 
+    const layout = checker.to_release_layout(config_parsed.value.dist.layout);
+
+    if (layout == release_enums.ReleaseLayout.none) {
+        try stderr.print("{s}: Unknown layout.\nCheck your zemit.toml.\n", .{error_fmt});
+        return;
+    }
+
     const path = try std.fmt.allocPrint(alloc, "       Compiles multi-target and places correctly named binaries in '{s}'", .{config_parsed.value.dist.dir});
     while (args.next()) |flag| {
         if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
@@ -117,16 +124,21 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
 
     var general_release_ctx = release_enums.ReleaseCtx{
         .alloc = alloc,
+
         .architecture = release_enums.Architectures.none,
-        .bin_name = bin_name,
-        .color = global_flags.color,
-        .d_optimize = d_optimize,
+
         .out_path = dist_dir_path,
         .full_path = "",
+        .bin_name = bin_name,
         .version = version,
+
+        .d_optimize = d_optimize,
+        .zig_args = zig_args,
+        .layout = layout,
+
         .verbose = global_flags.verbose,
         .total = total,
-        .zig_args = zig_args,
+        .color = global_flags.color,
     };
 
     var build_timer = try std.time.Timer.start();
