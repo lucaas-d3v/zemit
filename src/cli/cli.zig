@@ -18,8 +18,21 @@ pub fn cli(alloc: std.mem.Allocator) !void {
 
     _ = args.next(); // bin name
 
-    var verbose: bool = false;
     var command: ?[]const u8 = null;
+
+    const is_tty = checker.is_TTY();
+    var color = is_tty;
+
+    const env_no_color = std.process.getEnvVarOwned(alloc, "NO_COLOR") catch null;
+    if (env_no_color) |val| {
+        defer alloc.free(val);
+        color = false;
+    }
+
+    var global_flags = generals_enums.GlobalFlags{
+        .color = color,
+        .verbose = false,
+    };
 
     // global flags
     while (args.next()) |arg| {
@@ -34,7 +47,12 @@ pub fn cli(alloc: std.mem.Allocator) !void {
         }
 
         if (checker.cli_args_equals(arg, &.{ "-v", "--verbose" })) {
-            verbose = true;
+            global_flags.verbose = true;
+            continue;
+        }
+
+        if (checker.cli_args_equals(arg, &.{ "-nc", "--no-color" })) {
+            global_flags.color = false;
             continue;
         }
 
@@ -53,7 +71,7 @@ pub fn cli(alloc: std.mem.Allocator) !void {
             .stdout = std.io.getStdOut().writer().any(),
             .stderr = std.io.getStdErr().writer().any(),
         };
-        release.release(alloc, io, &args, build_options.zemit_version, verbose) catch |err| {
+        release.release(alloc, global_flags, io, &args, build_options.zemit_version) catch |err| {
             switch (err) {
                 error.InvalidConfig => try io.stderr.print("Check your zemit.toml.\n", .{}),
                 else => {},
@@ -66,7 +84,7 @@ pub fn cli(alloc: std.mem.Allocator) !void {
     }
 
     if (checker.str_equals(cmd, "clean")) {
-        try clean.clean(alloc, &args, "zemit.toml", verbose);
+        try clean.clean(alloc, global_flags, &args, "zemit.toml");
         return;
     }
 

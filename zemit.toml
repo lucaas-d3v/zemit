@@ -21,7 +21,7 @@ targets = [
 ]
 
 [dist]
-dir = "zemit/dist"
+dir = "."
 layout = "by_target"
 name_template = "{bin}-{version}-{target}{ext}"
 

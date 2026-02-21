@@ -1,5 +1,7 @@
 const std = @import("std");
+
 const release_enums = @import("../cli/commands/release/release_utils/release_enums.zig");
+const fmt = @import("../utils/stdout_formatter.zig");
 
 pub fn str_equals(str_a: []const u8, str_b: []const u8) bool {
     return std.mem.eql(u8, str_a, str_b);
@@ -93,14 +95,37 @@ pub fn is_valid_project(alloc: std.mem.Allocator, dir: std.fs.Dir) !bool {
     if (file_exists(dir, zon_build_zig_file)) {
         valid_p.zon_build_zig = true;
     } else {
-        try stdout.print("Info: build.zig.zon não encontrado.\n", .{});
         return false;
     }
 
     return valid_p.is_valid();
 }
 
-pub fn validate_dist_dir(dir: []const u8) release_enums.DistDirError!void {
+pub fn validate_dist_dir_stop_if_not(alloc: std.mem.Allocator, dir: []const u8, stderr: std.io.AnyWriter, color: bool) !void {
+    check_dir_rules(dir) catch |err| {
+        try comunicate_error(alloc, err, stderr, color);
+    };
+}
+
+fn comunicate_error(alloc: std.mem.Allocator, err: release_enums.DistDirError, stderr: std.io.AnyWriter, color: bool) !void {
+    const error_fmt = try fmt.red(alloc, "ERROR", color);
+    defer alloc.free(error_fmt);
+
+    switch (err) {
+        error.Empty => try stderr.print("{s}: dist.dir cannot be empty.\n", .{error_fmt}),
+        error.Dot => try stderr.print("{s}: dist.dir cannot be '.' or './'. Choose a subdirectory.\n", .{error_fmt}),
+        error.AbsolutePath => try stderr.print("{s}: dist.dir must be a relative path.\n", .{error_fmt}),
+        error.Traversal => try stderr.print("{s}: dist.dir cannot contain '..' path traversal.\n", .{error_fmt}),
+        error.ZigOut => try stderr.print("{s}: dist.dir cannot be 'zig-out'.\n", .{error_fmt}),
+        error.TildeNotAllowed => try stderr.print("{s}: dist.dir cannot start with '~'.\n", .{error_fmt}),
+        error.BackslashNotAllowed => try stderr.print("{s}: dist.dir cannot contain '\\\\'.\n", .{error_fmt}),
+        error.InvalidByte => try stderr.print("{s}: dist.dir contains invalid characters.\n", .{error_fmt}),
+    }
+    // Retorna um erro genérico após logar a mensagem específica
+    return error.InvalidConfig;
+}
+
+fn check_dir_rules(dir: []const u8) !void {
     if (dir.len == 0) return error.Empty;
 
     // block NUL and weird bytes that can mess with OS APIs/logs

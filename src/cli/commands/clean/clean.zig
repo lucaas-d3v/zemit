@@ -7,22 +7,22 @@ const fmt = @import("../../../utils/stdout_formatter.zig");
 const utils = @import("../../../utils/checkers.zig");
 const checker = @import("../../../utils/checkers.zig");
 const helps = @import("../../commands/generics/help_command.zig");
+const general_enums = @import("../../../utils/general_enums.zig");
 
-pub fn clean(alloc: std.mem.Allocator, args: *std.process.ArgIterator, toml_path: []const u8, verbose: bool) !void {
+pub fn clean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlags, args: *std.process.ArgIterator, toml_path: []const u8) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
-    const is_tty = utils.is_TTY();
     var dry_run = false;
 
-    const ERROR = try fmt.red(alloc, "ERROR", is_tty);
-    defer alloc.free(ERROR);
+    const error_fmt = try fmt.red(alloc, "ERROR", global_flags.color);
+    defer alloc.free(error_fmt);
 
-    const OK = try fmt.green(alloc, "✓", is_tty);
-    defer alloc.free(OK);
+    const ok_fmt = try fmt.green(alloc, "✓", global_flags.color);
+    defer alloc.free(ok_fmt);
 
     const config_parsed = reader.load(alloc, toml_path) catch |err| {
-        try stderr.print("{s}: Failed to parse '{s}', check the syntaxe", .{ ERROR, toml_path });
+        try stderr.print("{s}: Failed to parse '{s}', check the syntaxe", .{ error_fmt, toml_path });
         return err;
     };
     defer config_parsed.deinit(); // this cleans up the arena allocator
@@ -49,6 +49,8 @@ pub fn clean(alloc: std.mem.Allocator, args: *std.process.ArgIterator, toml_path
 
     var current_dir = try std.fs.cwd().openDir(".", .{});
     defer current_dir.close();
+
+    try checker.validate_dist_dir_stop_if_not(alloc, zemit_dir, stderr.any(), global_flags.color);
 
     if (dry_run) {
         const sep = std.fs.path.sep;
@@ -86,13 +88,13 @@ pub fn clean(alloc: std.mem.Allocator, args: *std.process.ArgIterator, toml_path
 
     try stdout.print("Cleaning output directory: '{s}'\n", .{zemit_dir});
     current_dir.deleteTree(zemit_dir) catch |err| {
-        try stderr.print("{s}: Failed to clean directory '{s}': {}\n", .{ ERROR, zemit_dir, err });
+        try stderr.print("{s}: Failed to clean directory '{s}': {}\n", .{ error_fmt, zemit_dir, err });
         return;
     };
 
-    if (verbose) {
-        try stdout.print("{s} Cleaned: '{s}'\n", .{ OK, zemit_dir });
+    if (global_flags.verbose) {
+        try stdout.print("{s} Cleaned: '{s}'\n", .{ ok_fmt, zemit_dir });
     } else {
-        try stdout.print("\n{s} Cleaned: '{s}'!\n", .{ OK, zemit_dir });
+        try stdout.print("\n{s} Cleaned: '{s}'!\n", .{ ok_fmt, zemit_dir });
     }
 }
