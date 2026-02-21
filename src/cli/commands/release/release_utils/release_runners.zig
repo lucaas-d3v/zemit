@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const arch = @import("../release.zig");
-const checker = @import("./release_checkers.zig");
+const checker = @import("../../../../utils/checkers.zig");
 const fmt = @import("../../../../utils/stdout_formatter.zig");
 const utils = @import("../../../../utils/checkers.zig");
 

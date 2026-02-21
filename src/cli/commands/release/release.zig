@@ -7,7 +7,6 @@ const reader = @import("../../../customization/config_reader.zig");
 const generals_enums = @import("../../../utils/general_enums.zig");
 
 // release utils
-const release_checker = @import("./release_utils/release_checkers.zig");
 const release_runner = @import("./release_utils/release_runners.zig");
 const release_enums = @import("./release_utils/release_enums.zig");
 
@@ -66,7 +65,7 @@ pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.
     const output_dir = try std.mem.Allocator.dupe(alloc, u8, dist.dir);
     defer alloc.free(output_dir);
 
-    release_checker.validate_dist_dir(output_dir) catch |err| {
+    checker.validate_dist_dir(output_dir) catch |err| {
         switch (err) {
             error.Empty => try stderr.print("{s}: dist.dir cannot be empty.\n", .{error_fmt}),
             error.Dot => try stderr.print("{s}: dist.dir cannot be '.' or './'. Choose a subdirectory.\n", .{error_fmt}),
@@ -107,7 +106,7 @@ pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.
     var current_directory = try std.fs.cwd().openDir(".", .{ .iterate = true });
     defer current_directory.close();
 
-    if (!(try release_checker.is_valid_project(alloc, current_directory))) {
+    if (!(try checker.is_valid_project(alloc, current_directory))) {
         try stderr.print("{s}: you are not in a valid zig project (project generated via `zig init`)\n", .{error_fmt});
         return;
     }
