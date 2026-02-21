@@ -1,14 +1,33 @@
 const std = @import("std");
 
+pub const ReleaseLayout = enum {
+    BY_TARGET,
+    FLAT,
+    none,
+
+    pub fn getName(self: ReleaseLayout) []const u8 {
+        return switch (self) {
+            .BY_TARGET => "by_target",
+            .FLAT => "flat",
+            .none => "none",
+        };
+    }
+};
+
 pub const ReleaseCtx = struct {
     alloc: std.mem.Allocator,
+
     architecture: Architectures,
+
     out_path: []const u8,
     full_path: []const u8,
     bin_name: []const u8,
     version: []const u8,
+
     d_optimize: []const u8,
     zig_args: []const []const u8,
+    layout: ReleaseLayout,
+
     verbose: bool,
     total: usize,
     color: bool,

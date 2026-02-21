@@ -8,9 +8,9 @@ As of the current release (v0.2.x), zemit supports:
 
 * `[build]`: `optimize`, `zig_args`
 * `[release]`: `targets`
-* `[dist]`: `dir`
+* `[dist]`: `dir`, `layout`
 
-Everything else that may appear in example snippets (such as `layout`, `name_template`, or `[checksums]`) is **reserved for future versions** and may be **ignored** today.
+Outros campos que podem aparecer em trechos de exemplo (como `name_template` ou `[checksums]`) são **reservados para versões futuras** e podem ser **ignorados** hoje.
 
 `zemit.toml` is optional. If the file is missing or fields are omitted, zemit falls back to its built-in defaults.
 
@@ -123,11 +123,50 @@ dir = "zig-out/dist"
 
 ---
 
-### `layout` (reserved / not implemented yet)
+### `layout` (supported)
 
-This field is reserved for future output layouts.
+Controls how release artifacts are organized inside the distribution directory.
 
-If present today, it may be ignored.
+Allowed values:
+
+* `by-target` (default)
+* `flat`
+
+Default:
+
+```toml
+layout = "by-target"
+```
+
+#### `by-target`
+
+Artifacts are grouped by target triple.
+
+Example layout:
+
+```
+dist/
+x86_64-linux-gnu/
+zemit-0.2.2-x86_64-linux-gnu
+x86_64-windows-gnu/
+zemit-0.2.2-x86_64-windows-gnu.exe
+```
+
+This layout preserves target separation and is recommended for multi-platform releases.
+
+#### `flat`
+
+All artifacts are written directly into the distribution directory.
+
+Example layout:
+
+```
+dist/
+zemit-0.2.2-x86_64-linux-gnu
+zemit-0.2.2-x86_64-windows-gnu.exe
+```
+
+This layout is useful for simple packaging, scripting, or when target separation is not required.
 
 ---
 

@@ -21,6 +21,7 @@ pub fn help(alloc: std.mem.Allocator) void {
     stdout.print("    -h, --help:           Show this help log.\n", .{}) catch {};
     stdout.print("    -V, --version:        Show zemit version.\n", .{}) catch {};
     stdout.print("    -v, --verbose:        Enable verbose mode.\n", .{}) catch {};
+    stdout.print("    -nc, --no-color:      Disables color elements and animations.\n", .{}) catch {};
 }
 
 pub fn helpOf(command_name: []const u8, flags: []const []const u8, descriptions: []const []const u8) void {

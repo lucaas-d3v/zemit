@@ -7,7 +7,6 @@ const reader = @import("../../../customization/config_reader.zig");
 const generals_enums = @import("../../../utils/general_enums.zig");
 
 // release utils
-const release_checker = @import("./release_utils/release_checkers.zig");
 const release_runner = @import("./release_utils/release_runners.zig");
 const release_enums = @import("./release_utils/release_enums.zig");
 
@@ -15,25 +14,15 @@ const release_enums = @import("./release_utils/release_enums.zig");
 const helps = @import("../generics/help_command.zig");
 const fmt = @import("../../../utils/stdout_formatter.zig");
 
-pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.process.ArgIterator, version: []const u8, verbose: bool) !void {
+pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlags, io_stds: generals_enums.Io, args: *std.process.ArgIterator, version: []const u8) !void {
     const stdout = io_stds.stdout;
     const stderr = io_stds.stderr;
 
-    // flags for 'release'
-    const is_tty = utils_release.is_TTY();
-    var color = is_tty;
-
-    const env_no_color = std.process.getEnvVarOwned(alloc, "NO_COLOR") catch null;
-    if (env_no_color) |val| {
-        defer alloc.free(val);
-        color = false;
-    }
-
     // These words are used in some places, it is preferable to create them first to avoid rewriting
-    const error_fmt = try fmt.red(alloc, "ERROR", color);
+    const error_fmt = try fmt.red(alloc, "ERROR", global_flags.color);
     defer alloc.free(error_fmt);
 
-    const ok_fmt = try fmt.green(alloc, "✓", color);
+    const ok_fmt = try fmt.green(alloc, "✓", global_flags.color);
     defer alloc.free(ok_fmt);
 
     const toml_path = "zemit.toml"; // hardcoded for now
@@ -43,19 +32,21 @@ pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.
     };
     defer config_parsed.deinit(); // This cleans up the arena allocator
 
+    const layout = checker.to_release_layout(config_parsed.value.dist.layout);
+
+    if (layout == release_enums.ReleaseLayout.none) {
+        try stderr.print("{s}: Unknown layout.\nCheck your zemit.toml.\n", .{error_fmt});
+        return;
+    }
+
     const path = try std.fmt.allocPrint(alloc, "       Compiles multi-target and places correctly named binaries in '{s}'", .{config_parsed.value.dist.dir});
     while (args.next()) |flag| {
         if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
-            helps.helpOf("release", &.{ "", "-h, --help", "--no-color" }, &.{ path, "Show this help log", "Disables color elements and animations" });
+            helps.helpOf("release", &.{ "", "-h, --help" }, &.{ path, "Show this help log" });
             return;
         }
 
-        if (checker.cli_args_equals(flag, &.{"--no-color"})) {
-            color = false;
-            continue;
-        }
-
-        helps.helpOf("release", &.{ "", "-h, --help", "--no-color" }, &.{ path, "Show this help log", "Disables color elements and animations" });
+        helps.helpOf("release", &.{ "", "-h, --help" }, &.{ path, "Show this help log" });
         try stderr.print("\nUnknown flag for command release: '{s}'\nUse -h or --help to see options.\n", .{flag});
         return;
     }
@@ -66,19 +57,7 @@ pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.
     const output_dir = try std.mem.Allocator.dupe(alloc, u8, dist.dir);
     defer alloc.free(output_dir);
 
-    validate_dist_dir(output_dir) catch |err| {
-        switch (err) {
-            error.Empty => try stderr.print("{s}: dist.dir cannot be empty.\n", .{error_fmt}),
-            error.Dot => try stderr.print("{s}: dist.dir cannot be '.' or './'. Choose a subdirectory.\n", .{error_fmt}),
-            error.AbsolutePath => try stderr.print("{s}: dist.dir must be a relative path (absolute paths are not allowed).\n", .{error_fmt}),
-            error.Traversal => try stderr.print("{s}: dist.dir cannot contain '..' path traversal.\n", .{error_fmt}),
-            error.ZigOut => try stderr.print("{s}: dist.dir cannot be 'zig-out'. Use 'zig-out/<folder>'.\n", .{error_fmt}),
-            error.TildeNotAllowed => try stderr.print("{s}: dist.dir cannot start with '~'. Use a relative path.\n", .{error_fmt}),
-            error.BackslashNotAllowed => try stderr.print("{s}: dist.dir cannot contain '\\\\'. Use '/' separators.\n", .{error_fmt}),
-            error.InvalidByte => try stderr.print("{s}: dist.dir contains invalid characters.\n", .{error_fmt}),
-        }
-        return error.InvalidConfig;
-    };
+    try checker.validate_dist_dir_stop_if_not(alloc, output_dir, stderr, global_flags.color);
 
     const archs = config_parsed.value.release.targets;
 
@@ -107,7 +86,7 @@ pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.
     var current_directory = try std.fs.cwd().openDir(".", .{ .iterate = true });
     defer current_directory.close();
 
-    if (!(try release_checker.is_valid_project(alloc, current_directory))) {
+    if (!(try checker.is_valid_project(alloc, current_directory))) {
         try stderr.print("{s}: you are not in a valid zig project (project generated via `zig init`)\n", .{error_fmt});
         return;
     }
@@ -129,9 +108,9 @@ pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.
     const d_optimize = config_parsed.value.build.optimize;
     const zig_args = config_parsed.value.build.zig_args;
 
-    if (color) {
+    if (global_flags.color) {
         const total_as_str = try std.fmt.allocPrint(alloc, "{d}", .{total});
-        const a = try fmt.cyan(alloc, total_as_str, is_tty);
+        const a = try fmt.cyan(alloc, total_as_str, global_flags.color);
 
         defer {
             alloc.free(total_as_str);
@@ -145,16 +124,21 @@ pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.
 
     var general_release_ctx = release_enums.ReleaseCtx{
         .alloc = alloc,
+
         .architecture = release_enums.Architectures.none,
-        .bin_name = bin_name,
-        .color = color,
-        .d_optimize = d_optimize,
+
         .out_path = dist_dir_path,
         .full_path = "",
+        .bin_name = bin_name,
         .version = version,
-        .verbose = verbose,
-        .total = total,
+
+        .d_optimize = d_optimize,
         .zig_args = zig_args,
+        .layout = layout,
+
+        .verbose = global_flags.verbose,
+        .total = total,
+        .color = global_flags.color,
     };
 
     var build_timer = try std.time.Timer.start();
@@ -185,10 +169,10 @@ pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.
     const raw_dur = try fmt.fmt_pure_duration(alloc, elapsed_ns);
     defer alloc.free(raw_dur);
 
-    const dur = try fmt.gray(alloc, raw_dur, color);
+    const dur = try fmt.gray(alloc, raw_dur, global_flags.color);
     defer alloc.free(dur);
 
-    if (verbose) {
+    if (global_flags.verbose) {
         try stdout.print("{s} Compilation completed! Binaries in: {s} {s}\n", .{ ok_fmt, dist_dir_path, dur });
     } else {
         try stdout.print("\n{s} Compilation completed! Binaries in: {s} {s}\n", .{ ok_fmt, dist_dir_path, dur });
@@ -198,55 +182,4 @@ pub fn release(alloc: std.mem.Allocator, io_stds: generals_enums.Io, args: *std.
         var bw = std.io.bufferedWriter(std.io.getStdOut().writer());
         try bw.flush();
     }
-}
-
-pub fn validate_dist_dir(dir: []const u8) release_enums.DistDirError!void {
-    if (dir.len == 0) return error.Empty;
-
-    // block NUL and weird bytes that can mess with OS APIs/logs
-    for (dir) |c| {
-        if (c == 0) return error.InvalidByte;
-    }
-
-    // common "current directory" forms
-    if (std.mem.eql(u8, dir, ".") or std.mem.eql(u8, dir, "./")) return error.Dot;
-
-    // reject "~" expansions (CLI tools shouldn't silently depend on shell expansion rules)
-    if (dir[0] == '~') return error.TildeNotAllowed;
-
-    // reject backslashes to avoid Windows-style confusion on *nix and path spoofing
-    if (std.mem.indexOfScalar(u8, dir, '\\') != null) return error.BackslashNotAllowed;
-
-    // absolute paths are dangerous for "clean" command
-    if (std.fs.path.isAbsolute(dir)) return error.AbsolutePath;
-
-    // normalize "zig-out" and "zig-out/" special case (your tool uses zig-out internally)
-    if (std.mem.eql(u8, dir, "zig-out") or std.mem.eql(u8, dir, "zig-out/")) return error.ZigOut;
-
-    // block any parent traversal:
-    // - ".."
-    // - "../x"
-    // - "x/.."
-    // - "x/../y"
-    if (containsDotDotSegment(dir)) return error.Traversal;
-
-    if (std.mem.indexOf(u8, dir, "//") != null) return error.InvalidByte;
-
-    if (dir[dir.len - 1] == ' ') return error.InvalidByte;
-}
-
-fn containsDotDotSegment(dir: []const u8) bool {
-    const sep = std.fs.path.sep;
-    var start: usize = 0;
-
-    while (start <= dir.len) {
-        const next = std.mem.indexOfScalarPos(u8, dir, start, sep) orelse dir.len;
-        const seg = dir[start..next];
-
-        if (seg.len == 2 and seg[0] == '.' and seg[1] == '.') return true;
-
-        if (next == dir.len) break;
-        start = next + 1;
-    }
-    return false;
 }
