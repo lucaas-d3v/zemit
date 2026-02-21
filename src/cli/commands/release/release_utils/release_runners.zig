@@ -14,11 +14,11 @@ pub fn compile_and_move(
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
-    const ERROR = try fmt.red(release_ctx.alloc, "ERROR", release_ctx.color);
-    defer release_ctx.alloc.free(ERROR);
+    const error_fmt = try fmt.red(release_ctx.alloc, "ERROR", release_ctx.color);
+    defer release_ctx.alloc.free(error_fmt);
 
-    const WARN = try fmt.yellow(release_ctx.alloc, "WARN", release_ctx.color);
-    defer release_ctx.alloc.free(WARN);
+    const warn_fmt = try fmt.yellow(release_ctx.alloc, "WARN", release_ctx.color);
+    defer release_ctx.alloc.free(warn_fmt);
 
     const arch_name = release_ctx.architecture.asString();
     const sep = std.fs.path.sep;
@@ -29,6 +29,7 @@ pub fn compile_and_move(
     release_ctx.full_path = full;
 
     if (release_ctx.verbose) {
+        try stdout.print("Layout: {s}\n", .{release_ctx.layout.getName()});
         try stdout.print("Target: {s}\n", .{arch_name});
         try stdout.print("Out: {s}\n", .{full});
     }
@@ -63,26 +64,32 @@ pub fn compile_and_move(
     const dur = try fmt.fmt_duration(release_ctx, elapsed_ns);
     defer release_ctx.alloc.free(dur);
 
-    const OK = try fmt.green(release_ctx.alloc, "ok", release_ctx.color);
-    defer release_ctx.alloc.free(OK);
+    const ok_fmt = try fmt.green(release_ctx.alloc, "ok", release_ctx.color);
+    defer release_ctx.alloc.free(ok_fmt);
 
     if (release_ctx.verbose) {
-        try stdout.print("Status: {s} {s}\n", .{ OK, dur });
+        try stdout.print("Status: {s} {s}\n", .{ ok_fmt, dur });
     } else {
-        try stdout.print("[{d}/{d}] {s} {s} {s}\n", .{ i, release_ctx.total, arch_name, OK, dur });
+        try stdout.print("[{d}/{d}] {s} {s} {s}\n", .{ i, release_ctx.total, arch_name, ok_fmt, dur });
     }
 
     if (release_ctx.verbose) try stdout.print("\n", .{});
 
-    const dist_arch_dir = try std.fmt.allocPrint(release_ctx.alloc, "{s}{c}{s}", .{ release_ctx.out_path, sep, arch_name });
+    const dist_arch_dir = if (release_ctx.layout == release_enums.ReleaseLayout.BY_TARGET)
+        try std.fmt.allocPrint(release_ctx.alloc, "{s}{c}{s}", .{ release_ctx.out_path, sep, arch_name })
+    else
+        try release_ctx.alloc.dupe(u8, release_ctx.out_path);
+
     defer release_ctx.alloc.free(dist_arch_dir);
 
-    std.fs.cwd().makePath(dist_arch_dir) catch |err| switch (err) {
-        error.PathAlreadyExists => {},
-        else => {
-            return err;
-        },
-    };
+    if (release_ctx.layout == release_enums.ReleaseLayout.BY_TARGET) {
+        std.fs.cwd().makePath(dist_arch_dir) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => {
+                return err;
+            },
+        };
+    }
 
     const bin_extension = switch (release_ctx.architecture) {
         .x86_64_windows_gnu, .x86_64_windows_msvc => ".exe",
@@ -90,9 +97,9 @@ pub fn compile_and_move(
     };
 
     var io_ctx = release_enums.IoCtx{
-        .ok_fmt = OK,
-        .warn_fmt = WARN,
-        .error_fmt = ERROR,
+        .ok_fmt = ok_fmt,
+        .warn_fmt = warn_fmt,
+        .error_fmt = error_fmt,
 
         .source_bin = "",
         .stderr = stderr.any(),

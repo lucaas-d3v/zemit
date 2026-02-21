@@ -3,8 +3,15 @@ const std = @import("std");
 pub const ReleaseLayout = enum {
     BY_TARGET,
     FLAT,
-
     none,
+
+    pub fn getName(self: ReleaseLayout) []const u8 {
+        return switch (self) {
+            .BY_TARGET => "by_target",
+            .FLAT => "flat",
+            .none => "none",
+        };
+    }
 };
 
 pub const ReleaseCtx = struct {
