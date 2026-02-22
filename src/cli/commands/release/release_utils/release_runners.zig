@@ -126,17 +126,15 @@ pub fn compile_and_move(
         .target = arch_name,
     };
 
-    const parsed_filename = try parser.format_binary_name(release_ctx.alloc, release_ctx.name_tamplate, ctx);
+    const parsed_filename = try parser.format_binary_name(release_ctx.alloc, release_ctx.name_tamplate, ctx, io_ctx);
     defer release_ctx.alloc.free(parsed_filename); // Limpamos o nome base assim que a função terminar
 
-    // 3. Construímos o CAMINHO FINAL usando a biblioteca padrão (Cross-platform)
     const full_dest_path = try std.fs.path.join(release_ctx.alloc, &[_][]const u8{
         dist_arch_dir,
         parsed_filename,
     });
     defer release_ctx.alloc.free(full_dest_path); // Limpamos o caminho completo
 
-    // 4. Alimentamos o IO e executamos
     io_ctx.dest_bin = full_dest_path;
 
     try move_and_delete_temp_dir(io_ctx);

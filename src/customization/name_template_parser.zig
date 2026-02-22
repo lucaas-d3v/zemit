@@ -1,4 +1,5 @@
 const std = @import("std");
+const release_enums = @import("../cli/commands/release/release_utils/release_enums.zig");
 
 pub const TokenType = enum {
     literal,
@@ -19,7 +20,7 @@ pub const Lexer = struct {
     source: []const u8,
     position: usize = 0,
 
-    pub fn next(self: *Lexer) Token {
+    pub fn next(self: *Lexer, iO: release_enums.IoCtx) !Token {
         if (self.position >= self.source.len) {
             return .{ .type = .eof, .value = "" };
         }
@@ -38,8 +39,22 @@ pub const Lexer = struct {
 
             if (self.position < self.source.len) self.position += 1;
 
+            const t_type = parse_var_type(var_name);
+            if (t_type == TokenType.unknown_var) {
+                self.position -= 1;
+
+                try iO.stderr.print("{s}: Unknown variable at position '{d}'\n\n\t{s}\n\t", .{ iO.error_fmt, self.position, self.source });
+
+                var i: u32 = 0;
+                while (i < self.position - 1) : (i += 1) {
+                    try iO.stderr.print(" ", .{});
+                }
+
+                try iO.stderr.print("^\n", .{});
+            }
+
             return .{
-                .type = parse_var_type(var_name),
+                .type = t_type,
                 .value = var_name,
             };
         }
@@ -70,13 +85,13 @@ pub const Context = struct {
     ext: []const u8,
 };
 
-pub fn format_binary_name(alloc: std.mem.Allocator, template: []const u8, ctx: Context) ![]const u8 {
+pub fn format_binary_name(alloc: std.mem.Allocator, template: []const u8, ctx: Context, io_stds: release_enums.IoCtx) ![]const u8 {
     var lexer = Lexer{ .source = template };
     var output = std.ArrayList(u8).init(alloc);
     errdefer output.deinit();
 
     while (true) {
-        const token = lexer.next();
+        const token = try lexer.next(io_stds);
         switch (token.type) {
             .eof => break,
             .literal => try output.appendSlice(token.value),

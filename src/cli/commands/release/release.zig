@@ -14,13 +14,15 @@ const release_enums = @import("./release_utils/release_enums.zig");
 const helps = @import("../generics/help_command.zig");
 const fmt = @import("../../../utils/stdout_formatter.zig");
 
-pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlags, io_stds: generals_enums.Io, args: *std.process.ArgIterator, version: []const u8) !void {
+pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlags, io_stds: *generals_enums.Io, args: *std.process.ArgIterator, version: []const u8) !void {
     const stdout = io_stds.stdout;
     const stderr = io_stds.stderr;
 
     // These words are used in some places, it is preferable to create them first to avoid rewriting
     const error_fmt = try fmt.red(alloc, "ERROR", global_flags.color);
     defer alloc.free(error_fmt);
+
+    io_stds.error_fmt = error_fmt;
 
     const ok_fmt = try fmt.green(alloc, "✓", global_flags.color);
     defer alloc.free(ok_fmt);
