@@ -1,3 +1,18 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/zemit_icon_light.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/zemit_icon_dark.png">
+    <img alt="zemit" src="assets/zemit_icon_dark.png" width="160">
+  </picture>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/zig-0.13.0-orange">
+  <img src="https://img.shields.io/badge/status-alpha-yellow">
+  <img src="https://img.shields.io/gitea/stars/lucaas-d3v/zemit?gitea_url=https%3A%2F%2Fcodeberg.org">
+  <!-- <img src="https://codeberg.org/lucaas-d3v/zemit/badges/issues/open.svg"> -->
+</p>
+
 # zemit
 
 Opinionated release automation tool for Zig projects.
