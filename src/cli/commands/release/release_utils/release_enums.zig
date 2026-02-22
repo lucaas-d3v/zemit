@@ -28,6 +28,8 @@ pub const ReleaseCtx = struct {
     zig_args: []const []const u8,
     layout: ReleaseLayout,
 
+    name_tamplate: []const u8,
+
     verbose: bool,
     total: usize,
     color: bool,

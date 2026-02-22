@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
 
     const opts = b.addOptions();
-    opts.addOption([]const u8, "zemit_version", "0.2.2");
+    opts.addOption([]const u8, "zemit_version", "0.2.3");
     exe.root_module.addImport("build_options", opts.createModule());
 
     b.installArtifact(exe);

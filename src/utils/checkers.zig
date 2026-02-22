@@ -133,16 +133,13 @@ fn check_dir_rules(dir: []const u8) !void {
     // common "current directory" forms
     if (std.mem.eql(u8, dir, ".") or std.mem.eql(u8, dir, "./")) return error.Dot;
 
-    // reject "~" expansions (CLI tools shouldn't silently depend on shell expansion rules)
     if (dir[0] == '~') return error.TildeNotAllowed;
 
     // reject backslashes to avoid Windows-style confusion on *nix and path spoofing
     if (std.mem.indexOfScalar(u8, dir, '\\') != null) return error.BackslashNotAllowed;
 
-    // absolute paths are dangerous for "clean" command
     if (std.fs.path.isAbsolute(dir)) return error.AbsolutePath;
 
-    // normalize "zig-out" and "zig-out/" special case (your tool uses zig-out internally)
     if (std.mem.eql(u8, dir, "zig-out") or std.mem.eql(u8, dir, "zig-out/")) return error.ZigOut;
 
     // block any parent traversal:

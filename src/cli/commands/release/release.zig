@@ -136,6 +136,8 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
         .zig_args = zig_args,
         .layout = layout,
 
+        .name_tamplate = config_parsed.value.dist.name_template,
+
         .verbose = global_flags.verbose,
         .total = total,
         .color = global_flags.color,
