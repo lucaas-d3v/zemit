@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/zemit_icon_light.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/zemit_icon_dark.png">
-    <img alt="zemit" src="assets/zemit_icon_dark.png" width="160">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/zemit_icon_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/zemit_icon_light.png">
+    <img alt="zemit icon" src="assets/zemit_icon_dark.png" width="160">
   </picture>
 </p>
 
