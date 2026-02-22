@@ -67,11 +67,13 @@ pub fn cli(alloc: std.mem.Allocator) !void {
 
     // dispatch
     if (checker.str_equals(cmd, "release")) {
-        const io = generals_enums.Io{
+        var io = generals_enums.Io{
             .stdout = std.io.getStdOut().writer().any(),
             .stderr = std.io.getStdErr().writer().any(),
+            .error_fmt = "",
         };
-        release.release(alloc, global_flags, io, &args, build_options.zemit_version) catch |err| {
+
+        release.release(alloc, global_flags, &io, &args, build_options.zemit_version) catch |err| {
             switch (err) {
                 error.InvalidConfig => try io.stderr.print("Check your zemit.toml.\n", .{}),
                 else => {},

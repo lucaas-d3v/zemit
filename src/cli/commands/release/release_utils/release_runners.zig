@@ -6,6 +6,7 @@ const fmt = @import("../../../../utils/stdout_formatter.zig");
 const utils = @import("../../../../utils/checkers.zig");
 
 const release_enums = @import("./release_enums.zig");
+const parser = @import("../../../../customization/name_template_parser.zig");
 
 pub fn compile_and_move(
     release_ctx: *release_enums.ReleaseCtx,
@@ -118,9 +119,23 @@ pub fn compile_and_move(
         return error.FileNotFound;
     }
 
-    const dest_bin = try std.fmt.allocPrint(release_ctx.alloc, "{s}{c}{s}-{s}-{s}{s}", .{ dist_arch_dir, sep, release_ctx.bin_name, release_ctx.version, arch_name, bin_extension });
-    defer release_ctx.alloc.free(dest_bin);
-    io_ctx.dest_bin = dest_bin;
+    const ctx = parser.Context{
+        .bin = release_ctx.bin_name,
+        .version = release_ctx.version,
+        .ext = bin_extension,
+        .target = arch_name,
+    };
+
+    const parsed_filename = try parser.format_binary_name(release_ctx.alloc, release_ctx.name_tamplate, ctx, io_ctx);
+    defer release_ctx.alloc.free(parsed_filename); // Limpamos o nome base assim que a função terminar
+
+    const full_dest_path = try std.fs.path.join(release_ctx.alloc, &[_][]const u8{
+        dist_arch_dir,
+        parsed_filename,
+    });
+    defer release_ctx.alloc.free(full_dest_path); // Limpamos o caminho completo
+
+    io_ctx.dest_bin = full_dest_path;
 
     try move_and_delete_temp_dir(io_ctx);
 

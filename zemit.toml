@@ -9,23 +9,25 @@ targets = [
     "x86_64-linux-gnu",
     "x86_64-linux-musl",
     "aarch64-linux-gnu",
-    "aarch64-linux-musl",
-    "arm-linux-gnueabihf",
-    "arm-linux-musleabihf",
-    "riscv64-linux-gnu",
-    "riscv64-linux-musl",
-    "x86_64-windows-gnu",
-    "x86_64-windows-msvc",
-    "x86_64-macos",
-    "aarch64-macos",
+    # "aarch64-linux-musl",
+    # "arm-linux-gnueabihf",
+    # "arm-linux-musleabihf",
+    # "riscv64-linux-gnu",
+    # "riscv64-linux-musl",
+    # "x86_64-windows-gnu",
+    # "x86_64-windows-msvc",
+    # "x86_64-macos",
+    # "aarch64-macos",
 ]
 
 
-#
 [dist]
 dir = "zemit/dist"
-layout = "by_target"
-name_template = "{bin}-{version}-{target}{ext}"
+layout = "flat"
+
+
+name_template = "{bi}-{version}-{target}{ext}"
+
 
 [checksums]
 enabled = true
