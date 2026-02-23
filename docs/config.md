@@ -8,9 +8,9 @@ As of the current release (v0.2.x), zemit supports:
 
 * `[build]`: `optimize`, `zig_args`
 * `[release]`: `targets`
-* `[dist]`: `dir`, `layout`
+* `[dist]`: `dir`, `layout`, `name_template`
 
-Outros campos que podem aparecer em trechos de exemplo (como `name_template` ou `[checksums]`) são **reservados para versões futuras** e podem ser **ignorados** hoje.
+Other fields that may appear in example snippets (such as `[checksums]`) are **reserved for future versions** and may be **ignored** today.
 
 `zemit.toml` is optional. If the file is missing or fields are omitted, zemit falls back to its built-in defaults.
 
@@ -169,12 +169,58 @@ zemit-0.2.2-x86_64-windows-gnu.exe
 This layout is useful for simple packaging, scripting, or when target separation is not required.
 
 ---
+### `name_template` (supported)
 
-### `name_template` (reserved / not implemented yet)
+Controls the output filename for release artifacts.
 
-This field is reserved for future artifact naming templates.
+Default:
 
-If present today, it may be ignored.
+```toml
+name_template = "{bin}-{version}-{target}{ext}"
+```
+
+#### Available variables:
+
+- {bin}: project or binary name
+
+- {version}: version string (from build.zig)
+
+- {target}: current target triple
+
+- {ext}: platform-specific extension
+
+> (e.g. .exe on Windows, empty on other platforms)
+
+#### Example:
+
+```toml
+[dist]
+layout = "flat"
+name_template = "{bin}-{version}-{target}{ext}"
+```
+
+#### Produces (example):
+
+- zemit-0.2.2-x86_64-linux-gnu
+- zemit-0.2.2-x86_64-windows-gnu.exe
+
+#### Template validation
+
+The template is validated at runtime.
+
+- Unknown variables cause an error
+- Invalid or unmatched braces cause an error
+
+Example error:
+
+```txt
+ERROR: Unknown variable 'exta' at position '24'
+
+    {bin}-{version}-{target}{exta}
+                            ^^^^^^
+```
+
+This helps catch mistakes early and avoids silently producing incorrect artifact names.
 
 ---
 
