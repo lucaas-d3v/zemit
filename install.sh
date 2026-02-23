@@ -15,7 +15,7 @@ fi
 
 echo "Compiling zemit..."
 cd "$SCRIPT_DIR"
-zig build -Doptimize=ReleaseSmall #-Dstrip=true
+zig build -Doptimize=Debug #-Dstrip=true
 echo "Binary compiled: $BIN_SRC"
 
 echo "Installing to $DEST_BIN"

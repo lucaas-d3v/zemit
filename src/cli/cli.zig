@@ -15,6 +15,7 @@ const version = @import("./commands/generics/version.zig");
 const release = @import("./commands/release/release.zig");
 const clean = @import("./commands/clean/clean.zig");
 
+// main entry point of the command line interface
 pub fn cli(alloc: std.mem.Allocator) !void {
     var args = try std.process.argsWithAllocator(alloc);
     defer args.deinit();

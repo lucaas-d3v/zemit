@@ -1,6 +1,7 @@
 const std = @import("std");
 const reader = @import("../../../customization/config_reader.zig");
 
+// displays the general help message, including available commands and global flags
 pub fn help(alloc: std.mem.Allocator) void {
     const config = reader.load(alloc, "zemit.toml") catch {
         return;
@@ -24,6 +25,7 @@ pub fn help(alloc: std.mem.Allocator) void {
     stdout.print("    -nc, --no-color:      Disables color elements and animations.\n", .{}) catch {};
 }
 
+// prints detailed help information for a specific command and its flags
 pub fn helpOf(command_name: []const u8, flags: []const []const u8, descriptions: []const []const u8) void {
     const stdout = std.io.getStdOut().writer();
 

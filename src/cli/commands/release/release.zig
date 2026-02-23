@@ -14,7 +14,15 @@ const release_enums = @import("./release_utils/release_enums.zig");
 const helps = @import("../generics/help_command.zig");
 const fmt = @import("../../../utils/stdout_formatter.zig");
 
-pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlags, io: *generals_enums.Io, args: *std.process.ArgIterator, release_ctx: release_enums.ReleaseCtx, config_parsed: reader.toml.Parsed(reader.Config)) !void {
+// handles the release command logic, compiling binaries for multiple targets
+pub fn release(
+    alloc: std.mem.Allocator,
+    global_flags: generals_enums.GlobalFlags,
+    io: *generals_enums.Io,
+    args: *std.process.ArgIterator,
+    release_ctx: release_enums.ReleaseCtx,
+    config_parsed: reader.toml.Parsed(reader.Config),
+) !void {
     const path = try std.fmt.allocPrint(alloc, "       Compiles multi-target and places correctly named binaries in '{s}'", .{config_parsed.value.dist.dir});
     while (args.next()) |flag| {
         if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
@@ -39,11 +47,6 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
 
     if (archs.len == 0) {
         try io.stderr.print("{s}: The architectures list described in 'zemit.toml' cannot be empty.\n", .{io.error_fmt});
-        return;
-    }
-
-    if (archs.len == 0) {
-        try io.stderr.print("{s}: No valid target architectures found. Check your zemit.toml configuration.\n", .{io.error_fmt});
         return;
     }
 

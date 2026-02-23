@@ -1,6 +1,7 @@
 const std = @import("std");
 const release_enums = @import("../cli/commands/release/release_utils/release_enums.zig");
 
+// defines the types of tokens recognized during template parsing
 pub const TokenType = enum {
     literal,
     bin,
@@ -11,15 +12,26 @@ pub const TokenType = enum {
     eof,
 };
 
+// represents a single unit of information extracted from the template string
 pub const Token = struct {
     type: TokenType,
     value: []const u8,
 };
 
+// data structure to hold values used for template variable replacement
+pub const Context = struct {
+    bin: []const u8,
+    version: []const u8,
+    target: []const u8,
+    ext: []const u8,
+};
+
+// handles the decomposition of the template string into manageable tokens
 pub const Lexer = struct {
     source: []const u8,
     position: usize = 0,
 
+    // extracts the next token from the source string and handles error reporting
     pub fn next(self: *Lexer, iO: release_enums.IoCtx) !Token {
         if (self.position >= self.source.len) {
             return .{ .type = .eof, .value = "" };
@@ -73,6 +85,7 @@ pub const Lexer = struct {
         };
     }
 
+    // maps a variable name string to its corresponding TokenType
     fn parse_var_type(str: []const u8) TokenType {
         if (std.mem.eql(u8, str, "bin")) return .bin;
         if (std.mem.eql(u8, str, "version")) return .version;
@@ -82,14 +95,13 @@ pub const Lexer = struct {
     }
 };
 
-pub const Context = struct {
-    bin: []const u8,
-    version: []const u8,
-    target: []const u8,
-    ext: []const u8,
-};
-
-pub fn format_binary_name(alloc: std.mem.Allocator, template: []const u8, ctx: Context, io_stds: release_enums.IoCtx) ![]const u8 {
+// processes the template string and produces the final binary name
+pub fn format_binary_name(
+    alloc: std.mem.Allocator,
+    template: []const u8,
+    ctx: Context,
+    io_stds: release_enums.IoCtx,
+) ![]const u8 {
     var lexer = Lexer{ .source = template };
     var output = std.ArrayList(u8).init(alloc);
     errdefer output.deinit();
