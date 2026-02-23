@@ -1,12 +1,19 @@
 const std = @import("std");
 
 const arch = @import("../release.zig");
-const checker = @import("./release_checkers.zig");
+const checker = @import("../../../../utils/checkers.zig");
 const fmt = @import("../../../../utils/stdout_formatter.zig");
 const utils = @import("../../../../utils/checkers.zig");
 
 const release_enums = @import("./release_enums.zig");
+pub const parser = @import("../../../../customization/name_template_parser.zig");
 
+// internal state for the compilation progress spinner
+const SpinnerState = struct {
+    running: std.atomic.Value(bool) = std.atomic.Value(bool).init(true),
+};
+
+// orchestrates the compilation, progress reporting, and final binary relocation
 pub fn compile_and_move(
     release_ctx: *release_enums.ReleaseCtx,
     i: usize,
@@ -14,11 +21,11 @@ pub fn compile_and_move(
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
-    const ERROR = try fmt.red(release_ctx.alloc, "ERROR", release_ctx.color);
-    defer release_ctx.alloc.free(ERROR);
+    const error_fmt = try fmt.red(release_ctx.alloc, "ERROR", release_ctx.color);
+    defer release_ctx.alloc.free(error_fmt);
 
-    const WARN = try fmt.yellow(release_ctx.alloc, "WARN", release_ctx.color);
-    defer release_ctx.alloc.free(WARN);
+    const warn_fmt = try fmt.yellow(release_ctx.alloc, "WARN", release_ctx.color);
+    defer release_ctx.alloc.free(warn_fmt);
 
     const arch_name = release_ctx.architecture.asString();
     const sep = std.fs.path.sep;
@@ -29,6 +36,7 @@ pub fn compile_and_move(
     release_ctx.full_path = full;
 
     if (release_ctx.verbose) {
+        try stdout.print("Layout: {s}\n", .{release_ctx.layout.getName()});
         try stdout.print("Target: {s}\n", .{arch_name});
         try stdout.print("Out: {s}\n", .{full});
     }
@@ -63,26 +71,32 @@ pub fn compile_and_move(
     const dur = try fmt.fmt_duration(release_ctx, elapsed_ns);
     defer release_ctx.alloc.free(dur);
 
-    const OK = try fmt.green(release_ctx.alloc, "ok", release_ctx.color);
-    defer release_ctx.alloc.free(OK);
+    const ok_fmt = try fmt.green(release_ctx.alloc, "ok", release_ctx.color);
+    defer release_ctx.alloc.free(ok_fmt);
 
     if (release_ctx.verbose) {
-        try stdout.print("Status: {s} {s}\n", .{ OK, dur });
+        try stdout.print("Status: {s} {s}\n", .{ ok_fmt, dur });
     } else {
-        try stdout.print("[{d}/{d}] {s} {s} {s}\n", .{ i, release_ctx.total, arch_name, OK, dur });
+        try stdout.print("[{d}/{d}] {s} {s} {s}\n", .{ i, release_ctx.total, arch_name, ok_fmt, dur });
     }
 
     if (release_ctx.verbose) try stdout.print("\n", .{});
 
-    const dist_arch_dir = try std.fmt.allocPrint(release_ctx.alloc, "{s}{c}{s}", .{ release_ctx.out_path, sep, arch_name });
+    const dist_arch_dir = if (release_ctx.layout == release_enums.ReleaseLayout.BY_TARGET)
+        try std.fmt.allocPrint(release_ctx.alloc, "{s}{c}{s}", .{ release_ctx.out_path, sep, arch_name })
+    else
+        try release_ctx.alloc.dupe(u8, release_ctx.out_path);
+
     defer release_ctx.alloc.free(dist_arch_dir);
 
-    std.fs.cwd().makePath(dist_arch_dir) catch |err| switch (err) {
-        error.PathAlreadyExists => {},
-        else => {
-            return err;
-        },
-    };
+    if (release_ctx.layout == release_enums.ReleaseLayout.BY_TARGET) {
+        std.fs.cwd().makePath(dist_arch_dir) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => {
+                return err;
+            },
+        };
+    }
 
     const bin_extension = switch (release_ctx.architecture) {
         .x86_64_windows_gnu, .x86_64_windows_msvc => ".exe",
@@ -90,9 +104,9 @@ pub fn compile_and_move(
     };
 
     var io_ctx = release_enums.IoCtx{
-        .ok_fmt = OK,
-        .warn_fmt = WARN,
-        .error_fmt = ERROR,
+        .ok_fmt = ok_fmt,
+        .warn_fmt = warn_fmt,
+        .error_fmt = error_fmt,
 
         .source_bin = "",
         .stderr = stderr.any(),
@@ -105,28 +119,48 @@ pub fn compile_and_move(
     defer release_ctx.alloc.free(source_bin);
     io_ctx.source_bin = source_bin;
 
-    const source_exists = try ensure_source_exists_or_list_bin_dir(release_ctx, io_ctx);
+    const ctx = parser.Context{
+        .bin = release_ctx.bin_name,
+        .version = release_ctx.version,
+        .ext = bin_extension,
+        .target = arch_name,
+    };
 
-    if (!source_exists) {
-        return error.FileNotFound;
-    }
+    const parsed_filename = try parser.format_binary_name(release_ctx.alloc, release_ctx.name_tamplate, ctx, io_ctx);
+    defer release_ctx.alloc.free(parsed_filename);
 
-    const dest_bin = try std.fmt.allocPrint(release_ctx.alloc, "{s}{c}{s}-{s}-{s}{s}", .{ dist_arch_dir, sep, release_ctx.bin_name, release_ctx.version, arch_name, bin_extension });
-    defer release_ctx.alloc.free(dest_bin);
-    io_ctx.dest_bin = dest_bin;
+    const full_dest_path = try std.fs.path.join(release_ctx.alloc, &[_][]const u8{
+        dist_arch_dir,
+        parsed_filename,
+    });
+    defer release_ctx.alloc.free(full_dest_path);
+
+    io_ctx.dest_bin = full_dest_path;
 
     try move_and_delete_temp_dir(io_ctx);
 
     return term;
 }
 
-fn prepare_temp_prefix(alloc: std.mem.Allocator, arch_name: []const u8) ![]const u8 {
+// creates a formatted string for the temporary build output directory
+pub fn prepare_temp_prefix(alloc: std.mem.Allocator, arch_name: []const u8) ![]const u8 {
     const temp_prefix = try std.fmt.allocPrint(alloc, "zig-out-{s}", .{arch_name});
     errdefer alloc.free(temp_prefix);
 
     return temp_prefix;
 }
 
+// ensures the temporary directory exists on the filesystem
+pub fn prepare_temp_dir(temp_prefix: []const u8) !void {
+    std.fs.cwd().makePath(temp_prefix) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => {
+            return err;
+        },
+    };
+}
+
+// constructs the zig build command arguments based on context and target
 fn build_argv(
     release_ctx: *release_enums.ReleaseCtx,
     temp_prefix: []const u8,
@@ -138,7 +172,6 @@ fn build_argv(
     const target_arg = try b.ownFmt("-Dtarget={s}", .{arch_name});
     const d_optimize_fmt = try b.ownFmt("-Doptimize={s}", .{release_ctx.d_optimize});
 
-    // the base command
     try b.args.append("zig");
     try b.args.append("build");
     try b.args.append("--prefix");
@@ -151,6 +184,7 @@ fn build_argv(
     return b;
 }
 
+// handles the execution of the build command and validates the process exit status
 fn run_build(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const u8, full_argv: []const []const u8, stderr: std.io.AnyWriter, full: []const u8) !std.process.Child.Term {
     const term = try run_with_spinner(release_ctx, prefix_line, full_argv, release_ctx.color);
 
@@ -182,6 +216,7 @@ fn run_build(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const u8, fu
     return term;
 }
 
+// runs the compilation process while displaying an animated spinner in the terminal
 fn run_with_spinner(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const u8, argv: []const []const u8, color: bool) !std.process.Child.Term {
     var child = std.process.Child.init(argv, release_ctx.alloc);
 
@@ -209,10 +244,7 @@ fn run_with_spinner(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const
     return term;
 }
 
-const SpinnerState = struct {
-    running: std.atomic.Value(bool) = std.atomic.Value(bool).init(true),
-};
-
+// background thread function that renders the spinner animation frames
 fn spinnerThread(
     state: *SpinnerState,
     prefix_line: []const u8,
@@ -238,14 +270,16 @@ fn spinnerThread(
     stdout.print("\r\x1b[2K", .{}) catch {};
 }
 
-fn get_source_bin(release_ctx: *release_enums.ReleaseCtx, temp_prefix: []const u8, bin_extension: []const u8, sep: u8) ![]const u8 {
+// returns the path to the expected binary after a successful zig build
+pub fn get_source_bin(release_ctx: *release_enums.ReleaseCtx, temp_prefix: []const u8, bin_extension: []const u8, sep: u8) ![]const u8 {
     const source_bin = try std.fmt.allocPrint(release_ctx.alloc, "{s}{c}bin{c}{s}{s}", .{ temp_prefix, sep, sep, release_ctx.bin_name, bin_extension });
     errdefer release_ctx.alloc.free(source_bin);
 
     return source_bin;
 }
 
-fn ensure_source_exists_or_list_bin_dir(release_ctx: *release_enums.ReleaseCtx, io_ctx: release_enums.IoCtx) !bool {
+// verifies if the source binary exists and lists the directory content on failure
+pub fn ensure_source_exists_or_list_bin_dir(release_ctx: *release_enums.ReleaseCtx, io_ctx: release_enums.IoCtx) !bool {
     const ERROR = try fmt.red(release_ctx.alloc, "ERROR", release_ctx.color);
     defer release_ctx.alloc.free(ERROR);
 
@@ -275,7 +309,8 @@ fn ensure_source_exists_or_list_bin_dir(release_ctx: *release_enums.ReleaseCtx, 
     return source_exists;
 }
 
-fn move_and_delete_temp_dir(io_ctx: release_enums.IoCtx) !void {
+// copies the compiled binary to the destination and removes temporary build artifacts
+pub fn move_and_delete_temp_dir(io_ctx: release_enums.IoCtx) !void {
     std.fs.cwd().copyFile(io_ctx.source_bin, std.fs.cwd(), io_ctx.dest_bin, .{}) catch |err| {
         try io_ctx.stderr.print("{s}: Failed to copy file: {}\n", .{ io_ctx.error_fmt, err });
         return err;
@@ -283,14 +318,5 @@ fn move_and_delete_temp_dir(io_ctx: release_enums.IoCtx) !void {
 
     std.fs.cwd().deleteTree(io_ctx.temp_prefix) catch |err| {
         try io_ctx.stderr.print("{s}: Unable to remove temporary directory: {}\n", .{ io_ctx.warn_fmt, err });
-    };
-}
-
-fn prepare_temp_dir(temp_prefix: []const u8) !void {
-    std.fs.cwd().makePath(temp_prefix) catch |err| switch (err) {
-        error.PathAlreadyExists => {},
-        else => {
-            return err;
-        },
     };
 }

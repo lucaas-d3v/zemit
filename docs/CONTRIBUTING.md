@@ -39,7 +39,7 @@ zemit prefers **clear stages** over hidden magic.
 
 ## Project status
 
-zemit is currently in **v0.1.x**.
+zemit is currently in **v0.2.x**.
 
 This means:
 - the core architecture is being established

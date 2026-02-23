@@ -1,6 +1,7 @@
 const std = @import("std");
 const cli = @import("./cli/cli.zig");
 
+// application entry point: initializes memory management and dispatches to the cli module
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();

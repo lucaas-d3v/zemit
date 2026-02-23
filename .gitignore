@@ -1,6 +1,6 @@
 .zig-cache
 zig-out*
 internal_docs
-.zemit
+zemit/
 y*
 release_gitlab.sh

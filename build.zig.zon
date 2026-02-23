@@ -1,8 +1,8 @@
 .{
     .name = "zemit",
-
     .version = "0.2.0",
 
+    // external dependencies fetched during build time
     .dependencies = .{
         .@"zig-toml" = .{
             .url = "git+https://github.com/sam701/zig-toml?ref=last-zig-0.13#67e35c75c5d11caf398bccae39d14d7187d1a952",
@@ -10,6 +10,7 @@
         },
     },
 
+    // list of files and directories to be included in the package
     .paths = .{
         "build.zig",
         "build.zig.zon",
