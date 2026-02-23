@@ -3,6 +3,8 @@ const std = @import("std");
 const release_enums = @import("../cli/commands/release/release_utils/release_enums.zig");
 const fmt = @import("../utils/stdout_formatter.zig");
 
+pub const sep = std.fs.path.sep;
+
 pub fn str_equals(str_a: []const u8, str_b: []const u8) bool {
     return std.mem.eql(u8, str_a, str_b);
 }
@@ -75,8 +77,6 @@ pub fn is_valid_project(alloc: std.mem.Allocator, dir: std.fs.Dir) !bool {
     const full_path_dir = try dir.realpathAlloc(alloc, ".");
     defer alloc.free(full_path_dir);
 
-    const sep = std.fs.path.sep;
-
     const build_zig_file = try std.fmt.allocPrint(alloc, "{s}{c}build.zig", .{ full_path_dir, sep });
     defer alloc.free(build_zig_file);
 
@@ -118,14 +118,12 @@ fn comunicate_error(alloc: std.mem.Allocator, err: release_enums.DistDirError, s
         error.BackslashNotAllowed => try stderr.print("{s}: dist.dir cannot contain '\\\\'.\n", .{error_fmt}),
         error.InvalidByte => try stderr.print("{s}: dist.dir contains invalid characters.\n", .{error_fmt}),
     }
-    // Retorna um erro genérico após logar a mensagem específica
-    return error.InvalidConfig;
+    -return error.InvalidConfig;
 }
 
 fn check_dir_rules(dir: []const u8) !void {
     if (dir.len == 0) return error.Empty;
 
-    // block NUL and weird bytes that can mess with OS APIs/logs
     for (dir) |c| {
         if (c == 0) return error.InvalidByte;
     }
@@ -155,7 +153,6 @@ fn check_dir_rules(dir: []const u8) !void {
 }
 
 fn contains_dot_dot_segment(dir: []const u8) bool {
-    const sep = std.fs.path.sep;
     var start: usize = 0;
 
     while (start <= dir.len) {
@@ -170,9 +167,23 @@ fn contains_dot_dot_segment(dir: []const u8) bool {
     return false;
 }
 
-pub fn to_release_layout(layout: []const u8) release_enums.ReleaseLayout {
+pub fn to_release_layout(layout: []const u8, stderr: std.io.AnyWriter, error_fmt: []const u8) !release_enums.ReleaseLayout {
     if (str_equals(layout, "by_target")) return release_enums.ReleaseLayout.BY_TARGET;
     if (str_equals(layout, "flat")) return release_enums.ReleaseLayout.FLAT;
 
+    try stderr.print("{s}: Unknown layout '{s}'.\nCheck your zemit.toml.\n", .{ error_fmt, layout });
     return release_enums.ReleaseLayout.none;
+}
+
+pub fn is_color(alloc: std.mem.Allocator) bool {
+    const is_tty = is_TTY();
+    var color = is_tty;
+
+    const env_no_color = std.process.getEnvVarOwned(alloc, "NO_COLOR") catch null;
+    if (env_no_color) |val| {
+        defer alloc.free(val);
+        color = false;
+    }
+
+    return color;
 }

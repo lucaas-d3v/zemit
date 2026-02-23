@@ -4,6 +4,8 @@ pub const Io = struct {
     stdout: std.io.AnyWriter,
     stderr: std.io.AnyWriter,
     error_fmt: []const u8,
+    ok_fmt: []const u8,
+    warn_fmt: []const u8,
 };
 
 pub const GlobalFlags = struct {

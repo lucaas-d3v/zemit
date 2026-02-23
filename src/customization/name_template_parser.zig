@@ -41,16 +41,20 @@ pub const Lexer = struct {
 
             const t_type = parse_var_type(var_name);
             if (t_type == TokenType.unknown_var) {
-                self.position -= 1;
+                try iO.stderr.print("{s}: Unknown variable '{s}' at position '{d}'\n\n\t{s}\n\t", .{ iO.error_fmt, var_name, start, self.source });
 
-                try iO.stderr.print("{s}: Unknown variable at position '{d}'\n\n\t{s}\n\t", .{ iO.error_fmt, self.position, self.source });
-
-                var i: u32 = 0;
-                while (i < self.position - 1) : (i += 1) {
+                var i: usize = 0;
+                while (i < start) : (i += 1) {
                     try iO.stderr.print(" ", .{});
                 }
 
-                try iO.stderr.print("^\n", .{});
+                const var_len = var_name.len + 2; // +2 for the '{' and '}'
+                i = 0;
+                while (i < var_len) : (i += 1) {
+                    try iO.stderr.print("^", .{});
+                }
+
+                try iO.stderr.print("\n", .{});
             }
 
             return .{
