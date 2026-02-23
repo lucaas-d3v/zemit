@@ -6,7 +6,7 @@ const fmt = @import("../../../../utils/stdout_formatter.zig");
 const utils = @import("../../../../utils/checkers.zig");
 
 const release_enums = @import("./release_enums.zig");
-const parser = @import("../../../../customization/name_template_parser.zig");
+pub const parser = @import("../../../../customization/name_template_parser.zig");
 
 pub fn compile_and_move(
     release_ctx: *release_enums.ReleaseCtx,
@@ -113,12 +113,6 @@ pub fn compile_and_move(
     defer release_ctx.alloc.free(source_bin);
     io_ctx.source_bin = source_bin;
 
-    const source_exists = try ensure_source_exists_or_list_bin_dir(release_ctx, io_ctx);
-
-    if (!source_exists) {
-        return error.FileNotFound;
-    }
-
     const ctx = parser.Context{
         .bin = release_ctx.bin_name,
         .version = release_ctx.version,
@@ -142,7 +136,7 @@ pub fn compile_and_move(
     return term;
 }
 
-fn prepare_temp_prefix(alloc: std.mem.Allocator, arch_name: []const u8) ![]const u8 {
+pub fn prepare_temp_prefix(alloc: std.mem.Allocator, arch_name: []const u8) ![]const u8 {
     const temp_prefix = try std.fmt.allocPrint(alloc, "zig-out-{s}", .{arch_name});
     errdefer alloc.free(temp_prefix);
 
@@ -260,14 +254,14 @@ fn spinnerThread(
     stdout.print("\r\x1b[2K", .{}) catch {};
 }
 
-fn get_source_bin(release_ctx: *release_enums.ReleaseCtx, temp_prefix: []const u8, bin_extension: []const u8, sep: u8) ![]const u8 {
+pub fn get_source_bin(release_ctx: *release_enums.ReleaseCtx, temp_prefix: []const u8, bin_extension: []const u8, sep: u8) ![]const u8 {
     const source_bin = try std.fmt.allocPrint(release_ctx.alloc, "{s}{c}bin{c}{s}{s}", .{ temp_prefix, sep, sep, release_ctx.bin_name, bin_extension });
     errdefer release_ctx.alloc.free(source_bin);
 
     return source_bin;
 }
 
-fn ensure_source_exists_or_list_bin_dir(release_ctx: *release_enums.ReleaseCtx, io_ctx: release_enums.IoCtx) !bool {
+pub fn ensure_source_exists_or_list_bin_dir(release_ctx: *release_enums.ReleaseCtx, io_ctx: release_enums.IoCtx) !bool {
     const ERROR = try fmt.red(release_ctx.alloc, "ERROR", release_ctx.color);
     defer release_ctx.alloc.free(ERROR);
 
@@ -297,7 +291,7 @@ fn ensure_source_exists_or_list_bin_dir(release_ctx: *release_enums.ReleaseCtx, 
     return source_exists;
 }
 
-fn move_and_delete_temp_dir(io_ctx: release_enums.IoCtx) !void {
+pub fn move_and_delete_temp_dir(io_ctx: release_enums.IoCtx) !void {
     std.fs.cwd().copyFile(io_ctx.source_bin, std.fs.cwd(), io_ctx.dest_bin, .{}) catch |err| {
         try io_ctx.stderr.print("{s}: Failed to copy file: {}\n", .{ io_ctx.error_fmt, err });
         return err;
@@ -308,7 +302,7 @@ fn move_and_delete_temp_dir(io_ctx: release_enums.IoCtx) !void {
     };
 }
 
-fn prepare_temp_dir(temp_prefix: []const u8) !void {
+pub fn prepare_temp_dir(temp_prefix: []const u8) !void {
     std.fs.cwd().makePath(temp_prefix) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => {
