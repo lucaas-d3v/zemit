@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
 
+// prints the current zemit version along with zig version and system architecture
 pub fn version(zVersion: []const u8) void {
     const stdout = std.io.getStdOut().writer();
 

@@ -1,11 +1,19 @@
 const std = @import("std");
-const toml = @import("toml");
+pub const toml = @import("toml");
 
+const chcker = @import("../utils/checkers.zig");
+const fmt = @import("../utils/stdout_formatter.zig");
+
+const release_enums = @import("../cli/commands/release/release_utils/release_enums.zig");
+const release = @import("../cli/commands/release/release_utils/release_runners.zig");
+
+// configuration related to the zig build process
 pub const Build = struct {
     optimize: []const u8 = "ReleaseSmall",
     zig_args: []const []const u8 = &.{},
 };
 
+// defines the target architectures for the multi-target release
 pub const Release = struct {
     targets: []const []const u8 = &.{
         "x86_64-linux-gnu",
@@ -23,25 +31,151 @@ pub const Release = struct {
     },
 };
 
+// configuration for distribution directory and naming conventions
 pub const Dist = struct {
     dir: []const u8 = "zemit/docs",
     layout: []const u8 = "by_target",
     name_template: []const u8 = "{bin}-{version}-{target}{ext}",
 };
 
+// configuration for generating file checksums
 pub const Checksums = struct {
     enabled: bool = true,
     algorithms: []const []const u8 = &.{"sha256"},
     file: []const u8 = "checksums.txt",
 };
 
+// root configuration structure for the zemit project
 pub const Config = struct {
     build: Build = .{},
     release: Release = .{},
     dist: Dist = .{},
     checksums: Checksums = .{},
+
+    // performs a full validation of the configuration parameters
+    pub fn is_ok(self: Config, alloc: std.mem.Allocator, release_ctx: *release_enums.ReleaseCtx) !bool {
+        const stderr = std.io.getStdErr().writer().any();
+        const error_fmt = try fmt.red(alloc, "ERROR", release_ctx.color);
+        defer alloc.free(error_fmt);
+
+        const ok_fmt = try fmt.green(alloc, "✓", release_ctx.color);
+        defer alloc.free(ok_fmt);
+
+        const warn_fmt = try fmt.yellow(alloc, "WARN", release_ctx.color);
+        defer alloc.free(warn_fmt);
+
+        const io = release_enums.IoCtx{
+            .ok_fmt = ok_fmt,
+            .error_fmt = error_fmt,
+            .warn_fmt = warn_fmt,
+
+            .dest_bin = "",
+            .sep = chcker.sep,
+            .source_bin = "",
+            .stderr = stderr,
+            .temp_prefix = "",
+        };
+
+        if (!(try is_valid_build(self.build, io))) return false;
+        if (!(try is_valid_release(self.release, io))) return false;
+        if (!(try is_valid_dist(alloc, self.dist, io, release_ctx))) return false;
+
+        return true;
+    }
 };
 
+// validates the build optimization mode
+fn is_valid_build(b: Build, io: release_enums.IoCtx) !bool {
+    if (chcker.str_equals(b.optimize, "ReleaseSmall")) return true;
+    if (chcker.str_equals(b.optimize, "ReleaseFast")) return true;
+    if (chcker.str_equals(b.optimize, "ReleaseSafe")) return true;
+    if (chcker.str_equals(b.optimize, "Debug")) return true;
+
+    try io.stderr.print("{s} Unknow Optimize '{s}'\n", .{ io.error_fmt, b.optimize });
+    try io.stderr.print("Check your zemit.toml.\n", .{});
+    return false;
+}
+
+// ensures all listed release targets are valid and supported
+fn is_valid_release(r: Release, io: release_enums.IoCtx) !bool {
+    for (r.targets) |target| {
+        if (target.len == 0) {
+            try io.stderr.print("{s}: The architecture described in 'zemit.toml' cannot be empty.\n", .{io.error_fmt});
+            return false;
+        }
+
+        if (!release_enums.Architectures.exists(target)) {
+            try io.stderr.print("{s}: Unknown architecture: '{s}'\n", .{ io.error_fmt, target });
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// validates distribution settings including directory paths and naming templates
+fn is_valid_dist(alloc: std.mem.Allocator, d: Dist, io: release_enums.IoCtx, release_ctx: *release_enums.ReleaseCtx) !bool {
+    const color = chcker.is_color(alloc);
+
+    try chcker.validate_dist_dir_stop_if_not(alloc, d.dir, io.stderr, color);
+
+    if (try chcker.to_release_layout(d.layout, io.stderr, io.error_fmt) == .none) {
+        return false;
+    }
+
+    const arch_name = release_ctx.architecture.asString();
+    const dist_arch_dir = if (release_ctx.layout == release_enums.ReleaseLayout.BY_TARGET)
+        try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{ release_ctx.out_path, chcker.sep, arch_name })
+    else
+        try alloc.dupe(u8, release_ctx.out_path);
+    defer alloc.free(dist_arch_dir);
+
+    const bin_extension = switch (release_ctx.architecture) {
+        .x86_64_windows_gnu, .x86_64_windows_msvc => ".exe",
+        else => "",
+    };
+
+    const temp_prefix = try release.prepare_temp_prefix(alloc, arch_name);
+    defer alloc.free(temp_prefix);
+
+    var io_ctx = release_enums.IoCtx{
+        .ok_fmt = io.ok_fmt,
+        .warn_fmt = io.warn_fmt,
+        .error_fmt = io.error_fmt,
+
+        .source_bin = "",
+        .stderr = io.stderr,
+        .sep = chcker.sep,
+        .temp_prefix = temp_prefix,
+        .dest_bin = "",
+    };
+
+    const source_bin = try release.get_source_bin(release_ctx, temp_prefix, bin_extension, chcker.sep);
+    defer alloc.free(source_bin);
+    io_ctx.source_bin = source_bin;
+
+    const ctx = release.parser.Context{
+        .bin = release_ctx.bin_name,
+        .version = release_ctx.version,
+        .ext = bin_extension,
+        .target = arch_name,
+    };
+
+    const parsed_filename = release.parser.format_binary_name(alloc, release_ctx.name_tamplate, ctx, io_ctx) catch {
+        return false;
+    };
+    defer alloc.free(parsed_filename);
+
+    const full_dest_path = try std.fs.path.join(alloc, &[_][]const u8{
+        dist_arch_dir,
+        parsed_filename,
+    });
+    defer alloc.free(full_dest_path);
+
+    return true;
+}
+
+// loads the configuration from a TOML file or returns defaults if not found
 pub fn load(allocator: std.mem.Allocator, toml_path: []const u8) !toml.Parsed(Config) {
     const file = std.fs.cwd().openFile(toml_path, .{}) catch |err| {
         if (err == error.FileNotFound) {

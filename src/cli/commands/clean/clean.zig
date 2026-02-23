@@ -9,7 +9,13 @@ const checker = @import("../../../utils/checkers.zig");
 const helps = @import("../../commands/generics/help_command.zig");
 const general_enums = @import("../../../utils/general_enums.zig");
 
-pub fn clean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlags, args: *std.process.ArgIterator, toml_path: []const u8) !void {
+// removes the distribution directory or lists files that would be removed
+pub fn clean(
+    alloc: std.mem.Allocator,
+    global_flags: general_enums.GlobalFlags,
+    args: *std.process.ArgIterator,
+    toml_path: []const u8,
+) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
@@ -25,12 +31,13 @@ pub fn clean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlags, 
         try stderr.print("{s}: Failed to parse '{s}', check the syntaxe", .{ error_fmt, toml_path });
         return err;
     };
-    defer config_parsed.deinit(); // this cleans up the arena allocator
+    defer config_parsed.deinit();
 
     const zemit_dir = config_parsed.value.dist.dir;
     const path = try std.fmt.allocPrint(alloc, "       Clears the output directory of multi-targets in '{s}'", .{zemit_dir});
     defer alloc.free(path);
 
+    // parse command flags
     while (args.next()) |flag| {
         if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
             helps.helpOf("clean", &.{ "", "-d, --dry-run", "-h, --help" }, &.{ path, "Preview of what will be cleaned", "Show this help log." });
@@ -52,6 +59,7 @@ pub fn clean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlags, 
 
     try checker.validate_dist_dir_stop_if_not(alloc, zemit_dir, stderr.any(), global_flags.color);
 
+    // preview removal if dry-run is enabled
     if (dry_run) {
         const sep = std.fs.path.sep;
         var out_dir = current_dir.openDir(zemit_dir, .{ .iterate = true }) catch |err| {
@@ -77,7 +85,7 @@ pub fn clean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlags, 
         return;
     }
 
-    // check if the folder exists before deleting
+    // execute directory removal
     current_dir.access(zemit_dir, .{}) catch |err| switch (err) {
         error.FileNotFound => {
             try stdout.print("Nothing to clean: '{s}' directory not found.\n", .{zemit_dir});

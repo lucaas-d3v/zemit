@@ -14,31 +14,15 @@ const release_enums = @import("./release_utils/release_enums.zig");
 const helps = @import("../generics/help_command.zig");
 const fmt = @import("../../../utils/stdout_formatter.zig");
 
-pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlags, io_stds: generals_enums.Io, args: *std.process.ArgIterator, version: []const u8) !void {
-    const stdout = io_stds.stdout;
-    const stderr = io_stds.stderr;
-
-    // These words are used in some places, it is preferable to create them first to avoid rewriting
-    const error_fmt = try fmt.red(alloc, "ERROR", global_flags.color);
-    defer alloc.free(error_fmt);
-
-    const ok_fmt = try fmt.green(alloc, "✓", global_flags.color);
-    defer alloc.free(ok_fmt);
-
-    const toml_path = "zemit.toml"; // hardcoded for now
-    const config_parsed = reader.load(alloc, toml_path) catch |err| {
-        std.log.err("{s}: Failed to parse '{s}', check the syntaxe", .{ error_fmt, toml_path });
-        return err;
-    };
-    defer config_parsed.deinit(); // This cleans up the arena allocator
-
-    const layout = checker.to_release_layout(config_parsed.value.dist.layout);
-
-    if (layout == release_enums.ReleaseLayout.none) {
-        try stderr.print("{s}: Unknown layout.\nCheck your zemit.toml.\n", .{error_fmt});
-        return;
-    }
-
+// handles the release command logic, compiling binaries for multiple targets
+pub fn release(
+    alloc: std.mem.Allocator,
+    global_flags: generals_enums.GlobalFlags,
+    io: *generals_enums.Io,
+    args: *std.process.ArgIterator,
+    release_ctx: release_enums.ReleaseCtx,
+    config_parsed: reader.toml.Parsed(reader.Config),
+) !void {
     const path = try std.fmt.allocPrint(alloc, "       Compiles multi-target and places correctly named binaries in '{s}'", .{config_parsed.value.dist.dir});
     while (args.next()) |flag| {
         if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
@@ -47,7 +31,7 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
         }
 
         helps.helpOf("release", &.{ "", "-h, --help" }, &.{ path, "Show this help log" });
-        try stderr.print("\nUnknown flag for command release: '{s}'\nUse -h or --help to see options.\n", .{flag});
+        try io.stderr.print("\nUnknown flag for command release: '{s}'\nUse -h or --help to see options.\n", .{flag});
         return;
     }
     alloc.free(path);
@@ -57,29 +41,12 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
     const output_dir = try std.mem.Allocator.dupe(alloc, u8, dist.dir);
     defer alloc.free(output_dir);
 
-    try checker.validate_dist_dir_stop_if_not(alloc, output_dir, stderr, global_flags.color);
+    try checker.validate_dist_dir_stop_if_not(alloc, output_dir, io.stderr, global_flags.color);
 
     const archs = config_parsed.value.release.targets;
 
     if (archs.len == 0) {
-        try stderr.print("{s}: The architectures list described in 'zemit.toml' cannot be empty.\n", .{error_fmt});
-        return;
-    }
-
-    for (archs) |target_str| {
-        if (target_str.len == 0) {
-            try stderr.print("{s}: The architecture described in 'zemit.toml' cannot be empty.\n", .{error_fmt});
-            return;
-        }
-
-        if (!release_enums.Architectures.exists(target_str)) {
-            try stderr.print("{s}: Unknown architecture: '{s}'\n", .{ error_fmt, target_str });
-            return;
-        }
-    }
-
-    if (archs.len == 0) {
-        try stderr.print("{s}: No valid target architectures found. Check your zemit.toml configuration.\n", .{error_fmt});
+        try io.stderr.print("{s}: The architectures list described in 'zemit.toml' cannot be empty.\n", .{io.error_fmt});
         return;
     }
 
@@ -87,7 +54,7 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
     defer current_directory.close();
 
     if (!(try checker.is_valid_project(alloc, current_directory))) {
-        try stderr.print("{s}: you are not in a valid zig project (project generated via `zig init`)\n", .{error_fmt});
+        try io.stderr.print("{s}: you are not in a valid zig project (project generated via `zig init`)\n", .{io.error_fmt});
         return;
     }
 
@@ -108,6 +75,29 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
     const d_optimize = config_parsed.value.build.optimize;
     const zig_args = config_parsed.value.build.zig_args;
 
+    var general_release_ctx = release_enums.ReleaseCtx{
+        .alloc = alloc,
+
+        .architecture = release_enums.Architectures.none,
+
+        .out_path = dist_dir_path,
+        .full_path = "",
+        .bin_name = bin_name,
+        .version = release_ctx.version,
+
+        .d_optimize = d_optimize,
+        .zig_args = zig_args,
+        .layout = release_ctx.layout,
+
+        .name_tamplate = config_parsed.value.dist.name_template,
+
+        .verbose = global_flags.verbose,
+        .total = total,
+        .color = global_flags.color,
+    };
+
+    _ = try config_parsed.value.is_ok(alloc, &general_release_ctx);
+
     if (global_flags.color) {
         const total_as_str = try std.fmt.allocPrint(alloc, "{d}", .{total});
         const a = try fmt.cyan(alloc, total_as_str, global_flags.color);
@@ -117,34 +107,15 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
             alloc.free(a);
         }
 
-        try stdout.print("\nStarting release for {s} targets...\n\n", .{a});
+        try io.stdout.print("\nStarting release for {s} targets...\n\n", .{a});
     } else {
-        try stdout.print("\nStarting release for {d} targets...\n\n", .{total});
+        try io.stdout.print("\nStarting release for {d} targets...\n\n", .{total});
     }
-
-    var general_release_ctx = release_enums.ReleaseCtx{
-        .alloc = alloc,
-
-        .architecture = release_enums.Architectures.none,
-
-        .out_path = dist_dir_path,
-        .full_path = "",
-        .bin_name = bin_name,
-        .version = version,
-
-        .d_optimize = d_optimize,
-        .zig_args = zig_args,
-        .layout = layout,
-
-        .verbose = global_flags.verbose,
-        .total = total,
-        .color = global_flags.color,
-    };
 
     var build_timer = try std.time.Timer.start();
     for (1.., archs) |i, architecture| {
         const arch = release_enums.Architectures.fromString(architecture) orelse {
-            try stderr.print("{s}: Unknown architecture: '{s}'\n", .{ error_fmt, architecture });
+            try io.stderr.print("{s}: Unknown architecture: '{s}'\n", .{ io.error_fmt, architecture });
             return;
         };
 
@@ -154,12 +125,12 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
         switch (exit_code) {
             .Exited => |code| {
                 if (code != 0) {
-                    try stderr.print("{s}: We were unable to compile your binary for '{s}'. exit code: {}\n", .{ error_fmt, arch.asString(), code });
+                    try io.stderr.print("{s}: We were unable to compile your binary for '{s}'. exit code: {}\n", .{ io.error_fmt, arch.asString(), code });
                     return;
                 }
             },
             .Signal, .Stopped, .Unknown => {
-                try stderr.print("{s}: Build process for '{s}' stopped or failed.\n", .{ error_fmt, arch.asString() });
+                try io.stderr.print("{s}: Build process for '{s}' stopped or failed.\n", .{ io.error_fmt, arch.asString() });
                 return;
             },
         }
@@ -173,9 +144,9 @@ pub fn release(alloc: std.mem.Allocator, global_flags: generals_enums.GlobalFlag
     defer alloc.free(dur);
 
     if (global_flags.verbose) {
-        try stdout.print("{s} Compilation completed! Binaries in: {s} {s}\n", .{ ok_fmt, dist_dir_path, dur });
+        try io.stdout.print("{s} Compilation completed! Binaries in: {s} {s}\n", .{ io.ok_fmt, dist_dir_path, dur });
     } else {
-        try stdout.print("\n{s} Compilation completed! Binaries in: {s} {s}\n", .{ ok_fmt, dist_dir_path, dur });
+        try io.stdout.print("\n{s} Compilation completed! Binaries in: {s} {s}\n", .{ io.ok_fmt, dist_dir_path, dur });
     }
 
     if (std.io.getStdOut().supportsAnsiEscapeCodes()) {

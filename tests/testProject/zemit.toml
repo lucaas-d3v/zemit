@@ -2,13 +2,13 @@
 
 [build]
 optimize = "ReleaseSmall"
-zig_args = ["-Dstrip=true"]
+# zig_args = ["-Dstrip=true"]
 
 [release]
 targets = [
     "x86_64-linux-gnu",
-    # "x86_64-linux-musl",
-    # "aarch64-linux-gnu",
+    "x86_64-linux-musl",
+    "aarch64-linux-gnu",
     # "aarch64-linux-musl",
     # "arm-linux-gnueabihf",
     # "arm-linux-musleabihf",
