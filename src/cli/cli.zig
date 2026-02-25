@@ -14,6 +14,7 @@ const helps = @import("./commands/generics/help_command.zig");
 const version = @import("./commands/generics/version.zig");
 const release = @import("./commands/release/release.zig");
 const clean = @import("./commands/clean/clean.zig");
+const test_ = @import("./commands/test/test.zig");
 
 // main entry point of the command line interface
 pub fn cli(alloc: std.mem.Allocator) !void {
@@ -114,6 +115,8 @@ pub fn cli(alloc: std.mem.Allocator) !void {
         .layout = layout,
         .name_tamplate = config_parsed.value.dist.name_template,
 
+        .check_sum = config_parsed.value.checksums,
+
         .verbose = global_flags.verbose,
         .total = 0,
         .color = global_flags.color,
@@ -121,17 +124,13 @@ pub fn cli(alloc: std.mem.Allocator) !void {
 
     // validate
     if (!(try config_parsed.value.is_ok(alloc, &release_ctx))) {
+        try io.stderr.print("Check your zemit.toml.\n", .{});
         return;
     }
 
     // dispatch
     if (checker.str_equals(cmd, "release")) {
-        release.release(alloc, global_flags, &io, &args, release_ctx, config_parsed) catch |err| {
-            switch (err) {
-                error.InvalidConfig => try io.stderr.print("Check your zemit.toml.\n", .{}),
-                else => {},
-            }
-
+        release.release(alloc, global_flags, &io, &args, release_ctx, config_parsed) catch {
             return;
         };
 
@@ -140,6 +139,11 @@ pub fn cli(alloc: std.mem.Allocator) !void {
 
     if (checker.str_equals(cmd, "clean")) {
         try clean.clean(alloc, global_flags, &args, "zemit.toml");
+        return;
+    }
+
+    if (checker.str_equals(cmd, "test")) {
+        try test_.test_(alloc, toml_path, &release_ctx, io);
         return;
     }
 

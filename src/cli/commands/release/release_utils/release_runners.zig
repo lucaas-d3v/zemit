@@ -7,6 +7,7 @@ const utils = @import("../../../../utils/checkers.zig");
 
 const release_enums = @import("./release_enums.zig");
 pub const parser = @import("../../../../customization/name_template_parser.zig");
+const config = @import("../../../../customization/config_reader.zig");
 
 // internal state for the compilation progress spinner
 const SpinnerState = struct {
@@ -109,6 +110,7 @@ pub fn compile_and_move(
         .error_fmt = error_fmt,
 
         .source_bin = "",
+
         .stderr = stderr.any(),
         .sep = sep,
         .temp_prefix = temp_prefix,
