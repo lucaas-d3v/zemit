@@ -89,6 +89,8 @@ pub fn release(
         .zig_args = zig_args,
         .layout = release_ctx.layout,
 
+        .check_sum = config_parsed.value.checksums,
+
         .name_tamplate = config_parsed.value.dist.name_template,
 
         .verbose = global_flags.verbose,

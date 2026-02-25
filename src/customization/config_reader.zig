@@ -55,6 +55,7 @@ pub const Config = struct {
     // performs a full validation of the configuration parameters
     pub fn is_ok(self: Config, alloc: std.mem.Allocator, release_ctx: *release_enums.ReleaseCtx) !bool {
         const stderr = std.io.getStdErr().writer().any();
+
         const error_fmt = try fmt.red(alloc, "ERROR", release_ctx.color);
         defer alloc.free(error_fmt);
 
@@ -73,16 +74,63 @@ pub const Config = struct {
             .sep = chcker.sep,
             .source_bin = "",
             .stderr = stderr,
+
             .temp_prefix = "",
         };
 
         if (!(try is_valid_build(self.build, io))) return false;
         if (!(try is_valid_release(self.release, io))) return false;
         if (!(try is_valid_dist(alloc, self.dist, io, release_ctx))) return false;
+        if (!(try is_valid_checksums(self.checksums, io))) return false;
 
         return true;
     }
 };
+
+// validates the build optimization mode
+fn is_valid_checksums(c: Checksums, io: release_enums.IoCtx) !bool {
+    // validate algorithms
+    for (c.algorithms) |algo| {
+        if (algo.len == 0) {
+            try io.stderr.print("{s} The algorithms list cannot be empty.\n", .{io.error_fmt});
+            return false;
+        }
+
+        if (!chcker.str_equals(algo, "sha256")) {
+            try io.stderr.print("{s} Unknow hash algorithm '{s}'.\n", .{ io.error_fmt, algo });
+            return false;
+        }
+    }
+
+    // file name not empty
+    if (c.file.len == 0) {
+        try io.stderr.print("{s}: The name of checksums file cannot be empty.\n", .{io.error_fmt});
+        return false;
+    }
+
+    const dot_pos = std.mem.indexOf(u8, c.file, ".");
+
+    // validate de extension
+    if (dot_pos) |ex_pos| {
+        const pos: u16 = @intCast(ex_pos);
+
+        const ext = c.file[pos + 1 ..];
+        // if extensions not is '.txt'
+        if (!valid_extension(ext)) {
+            try io.stderr.print("{s}: The extension '{s}' not is supproted for cheksums file.\n", .{ io.error_fmt, ext });
+            return false;
+        }
+    } else {
+        try io.stderr.print("{s}: The name of cheksums file need a extension.\n", .{io.error_fmt});
+        return false;
+    }
+
+    return true;
+}
+
+fn valid_extension(ext: []const u8) bool {
+    return chcker.str_equals(ext, "txt");
+}
 
 // validates the build optimization mode
 fn is_valid_build(b: Build, io: release_enums.IoCtx) !bool {
@@ -91,8 +139,7 @@ fn is_valid_build(b: Build, io: release_enums.IoCtx) !bool {
     if (chcker.str_equals(b.optimize, "ReleaseSafe")) return true;
     if (chcker.str_equals(b.optimize, "Debug")) return true;
 
-    try io.stderr.print("{s} Unknow Optimize '{s}'\n", .{ io.error_fmt, b.optimize });
-    try io.stderr.print("Check your zemit.toml.\n", .{});
+    try io.stderr.print("{s} Unknow Optimize '{s}'.\n", .{ io.error_fmt, b.optimize });
     return false;
 }
 
@@ -105,7 +152,7 @@ fn is_valid_release(r: Release, io: release_enums.IoCtx) !bool {
         }
 
         if (!release_enums.Architectures.exists(target)) {
-            try io.stderr.print("{s}: Unknown architecture: '{s}'\n", .{ io.error_fmt, target });
+            try io.stderr.print("{s}: Unknown architecture: '{s}'.\n", .{ io.error_fmt, target });
             return false;
         }
     }
@@ -144,7 +191,9 @@ fn is_valid_dist(alloc: std.mem.Allocator, d: Dist, io: release_enums.IoCtx, rel
         .error_fmt = io.error_fmt,
 
         .source_bin = "",
+
         .stderr = io.stderr,
+
         .sep = chcker.sep,
         .temp_prefix = temp_prefix,
         .dest_bin = "",

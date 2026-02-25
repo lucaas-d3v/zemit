@@ -1,4 +1,5 @@
 const std = @import("std");
+const config = @import("../../../../customization/config_reader.zig");
 
 // defines how the final binaries will be structured in the output directory
 pub const ReleaseLayout = enum {
@@ -33,6 +34,8 @@ pub const ReleaseCtx = struct {
 
     name_tamplate: []const u8,
 
+    check_sum: config.Checksums,
+
     verbose: bool,
     total: usize,
     color: bool,
@@ -48,6 +51,7 @@ pub const IoCtx = struct {
     sep: u8,
     temp_prefix: []const u8,
     dest_bin: []const u8,
+
     stderr: std.io.AnyWriter,
 };
 
