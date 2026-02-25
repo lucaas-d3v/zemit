@@ -115,7 +115,7 @@ pub fn cli(alloc: std.mem.Allocator) !void {
         .layout = layout,
         .name_tamplate = config_parsed.value.dist.name_template,
 
-        .check_sum = config_parsed.value.checksums,
+        .checksums = undefined,
 
         .verbose = global_flags.verbose,
         .total = 0,

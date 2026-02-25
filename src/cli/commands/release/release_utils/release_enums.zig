@@ -34,11 +34,19 @@ pub const ReleaseCtx = struct {
 
     name_tamplate: []const u8,
 
-    check_sum: config.Checksums,
+    checksums: ChecksumsCtx,
 
     verbose: bool,
     total: usize,
     color: bool,
+};
+
+// context for checksums
+pub const ChecksumsCtx = struct {
+    checksums: config.Checksums,
+
+    checksums_builder: std.ArrayList(u8),
+    checksums_writer: std.io.AnyWriter,
 };
 
 // context for input/output operations and terminal formatting during release

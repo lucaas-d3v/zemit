@@ -1,7 +1,7 @@
 const std = @import("std");
 pub const toml = @import("toml");
 
-const chcker = @import("../utils/checkers.zig");
+const checker = @import("../utils/checkers.zig");
 const fmt = @import("../utils/stdout_formatter.zig");
 
 const release_enums = @import("../cli/commands/release/release_utils/release_enums.zig");
@@ -41,7 +41,7 @@ pub const Dist = struct {
 // configuration for generating file checksums
 pub const Checksums = struct {
     enabled: bool = true,
-    algorithms: []const []const u8 = &.{"sha256"},
+    algorithm: []const u8 = "sha256",
     file: []const u8 = "checksums.txt",
 };
 
@@ -71,7 +71,7 @@ pub const Config = struct {
             .warn_fmt = warn_fmt,
 
             .dest_bin = "",
-            .sep = chcker.sep,
+            .sep = checker.sep,
             .source_bin = "",
             .stderr = stderr,
 
@@ -89,17 +89,15 @@ pub const Config = struct {
 
 // validates the build optimization mode
 fn is_valid_checksums(c: Checksums, io: release_enums.IoCtx) !bool {
-    // validate algorithms
-    for (c.algorithms) |algo| {
-        if (algo.len == 0) {
-            try io.stderr.print("{s} The algorithms list cannot be empty.\n", .{io.error_fmt});
-            return false;
-        }
+    // validate algorithm
+    if (c.algorithm.len == 0) {
+        try io.stderr.print("{s} The algorithms list cannot be empty.\n", .{io.error_fmt});
+        return false;
+    }
 
-        if (!chcker.str_equals(algo, "sha256")) {
-            try io.stderr.print("{s} Unknow hash algorithm '{s}'.\n", .{ io.error_fmt, algo });
-            return false;
-        }
+    if (!checker.str_equals(c.algorithm, "sha256") and !checker.str_equals(c.algorithm, "sha512")) {
+        try io.stderr.print("{s} Unknow hash algorithm '{s}'.\n", .{ io.error_fmt, c.algorithm });
+        return false;
     }
 
     // file name not empty
@@ -129,15 +127,15 @@ fn is_valid_checksums(c: Checksums, io: release_enums.IoCtx) !bool {
 }
 
 fn valid_extension(ext: []const u8) bool {
-    return chcker.str_equals(ext, "txt");
+    return checker.str_equals(ext, "txt");
 }
 
 // validates the build optimization mode
 fn is_valid_build(b: Build, io: release_enums.IoCtx) !bool {
-    if (chcker.str_equals(b.optimize, "ReleaseSmall")) return true;
-    if (chcker.str_equals(b.optimize, "ReleaseFast")) return true;
-    if (chcker.str_equals(b.optimize, "ReleaseSafe")) return true;
-    if (chcker.str_equals(b.optimize, "Debug")) return true;
+    if (checker.str_equals(b.optimize, "ReleaseSmall")) return true;
+    if (checker.str_equals(b.optimize, "ReleaseFast")) return true;
+    if (checker.str_equals(b.optimize, "ReleaseSafe")) return true;
+    if (checker.str_equals(b.optimize, "Debug")) return true;
 
     try io.stderr.print("{s} Unknow Optimize '{s}'.\n", .{ io.error_fmt, b.optimize });
     return false;
@@ -162,17 +160,17 @@ fn is_valid_release(r: Release, io: release_enums.IoCtx) !bool {
 
 // validates distribution settings including directory paths and naming templates
 fn is_valid_dist(alloc: std.mem.Allocator, d: Dist, io: release_enums.IoCtx, release_ctx: *release_enums.ReleaseCtx) !bool {
-    const color = chcker.is_color(alloc);
+    const color = checker.is_color(alloc);
 
-    try chcker.validate_dist_dir_stop_if_not(alloc, d.dir, io.stderr, color);
+    try checker.validate_dist_dir_stop_if_not(alloc, d.dir, io.stderr, color);
 
-    if (try chcker.to_release_layout(d.layout, io.stderr, io.error_fmt) == .none) {
+    if (try checker.to_release_layout(d.layout, io.stderr, io.error_fmt) == .none) {
         return false;
     }
 
     const arch_name = release_ctx.architecture.asString();
     const dist_arch_dir = if (release_ctx.layout == release_enums.ReleaseLayout.BY_TARGET)
-        try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{ release_ctx.out_path, chcker.sep, arch_name })
+        try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{ release_ctx.out_path, checker.sep, arch_name })
     else
         try alloc.dupe(u8, release_ctx.out_path);
     defer alloc.free(dist_arch_dir);
@@ -194,12 +192,12 @@ fn is_valid_dist(alloc: std.mem.Allocator, d: Dist, io: release_enums.IoCtx, rel
 
         .stderr = io.stderr,
 
-        .sep = chcker.sep,
+        .sep = checker.sep,
         .temp_prefix = temp_prefix,
         .dest_bin = "",
     };
 
-    const source_bin = try release.get_source_bin(release_ctx, temp_prefix, bin_extension, chcker.sep);
+    const source_bin = try release.get_source_bin(release_ctx, temp_prefix, bin_extension, checker.sep);
     defer alloc.free(source_bin);
     io_ctx.source_bin = source_bin;
 
