@@ -4,13 +4,12 @@ This document describes the `zemit.toml` configuration file.
 
 ## Current support
 
-As of the current release (v0.2.x), zemit supports:
+As of the current release (v0.x), zemit supports:
 
 * `[build]`: `optimize`, `zig_args`
 * `[release]`: `targets`
 * `[dist]`: `dir`, `layout`, `name_template`
-
-Other fields that may appear in example snippets (such as `[checksums]`) are **reserved for future versions** and may be **ignored** today.
+* `[checksums]`: `enabled`, `algorithm`, `file`
 
 `zemit.toml` is optional. If the file is missing or fields are omitted, zemit falls back to its built-in defaults.
 
@@ -224,20 +223,135 @@ This helps catch mistakes early and avoids silently producing incorrect artifact
 
 ---
 
-## `[checksums]` section (reserved / not implemented yet)
+## `[checksums]` section
 
-This section is not implemented in the current release.
-
-If present today, it may be ignored.
-
-Example (reserved):
+Controls checksum generation for release artifacts.
 
 ```toml
 [checksums]
 enabled = true
-algorithms = ["sha256"]
+algorithm = "sha256"
 file = "checksums.txt"
 ```
+
+### `enabled`
+Enables or disables checksum generation.
+
+
+Allowed values:
+
+- true
+
+- false
+
+Default:
+
+```toml
+enabled = false
+```
+
+When disabled, no checksum file is generated.
+
+---
+
+### `algorithm`
+
+Specifies the hashing algorithm used to generate checksums.
+
+Allowed values:
+
+- `"sha256"`
+
+- `"sha512"`
+
+Default:
+
+```toml
+algorithm = "sha256"
+```
+
+---
+
+### `file`
+
+Specifies the output filename for the checksum file.
+
+Constraints:
+
+- Must not be empty
+
+- Must have a `.txt` extension
+
+Example:
+
+```toml
+file = "checksums.txt"
+```
+
+If the filename is invalid (empty or missing .txt extension), zemit will return an error.
+
+---
+
+### Generated file format
+
+The checksum file follows the standard GNU coreutils format:
+
+```txt
+<hash> <filename>
+```
+
+One space separate the hash and the filename.
+
+Example:
+
+```txt
+3a5f2d9c9b7e3f0b2e0e1f6e3a9a12f8d77c1f1e3f4a7c8e9d2b6c1a2f3e4d5 zemit-0.2.2-x86_64-linux-gnu
+9c1a2f3e4d53a5f2d9c9b7e3f0b2e0e1f6e3a9a12f8d77c1f1e3f4a7c8e9d2b6 zemit-0.2.2-x86_64-windows-gnu.exe
+```
+
+This format allows verification using standard tools:
+
+```shell
+sha256sum -c checksums.txt
+```
+
+or
+
+```shell
+sha512sum -c checksums.txt
+```
+
+depending on the selected algorithm.
+
+---
+
+### Placement
+
+The checksum file is generated inside the distribution directory (`[dist].dir`) according to the selected layout.
+
+For example:
+
+`flat`
+
+```txt
+dist/
+zemit-0.2.2-x86_64-linux-gnu
+zemit-0.2.2-x86_64-windows-gnu.exe
+checksums.txt
+```
+
+`by-target`
+
+```txt
+dist/
+x86_64-linux-gnu/
+zemit-0.2.2-x86_64-linux-gnu
+x86_64-windows-gnu/
+zemit-0.2.2-x86_64-windows-gnu.exe
+checksums.txt
+```
+
+A single checksum file is generated per release.
 
 ---
 
