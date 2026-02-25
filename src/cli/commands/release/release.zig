@@ -89,7 +89,11 @@ pub fn release(
         .zig_args = zig_args,
         .layout = release_ctx.layout,
 
-        .check_sum = config_parsed.value.checksums,
+        .checksums = release_enums.ChecksumsCtx{
+            .checksums = config_parsed.value.checksums,
+            .checksums_builder = std.ArrayList(u8).init(alloc),
+            .checksums_writer = undefined,
+        },
 
         .name_tamplate = config_parsed.value.dist.name_template,
 
@@ -97,6 +101,8 @@ pub fn release(
         .total = total,
         .color = global_flags.color,
     };
+    defer general_release_ctx.checksums.checksums_builder.deinit();
+    general_release_ctx.checksums.checksums_writer = general_release_ctx.checksums.checksums_builder.writer().any();
 
     _ = try config_parsed.value.is_ok(alloc, &general_release_ctx);
 
@@ -123,7 +129,7 @@ pub fn release(
 
         general_release_ctx.architecture = arch;
 
-        const exit_code = release_runner.compile_and_move(&general_release_ctx, i) catch return;
+        const exit_code = release_runner.compile_and_move(&general_release_ctx, io, i) catch return;
         switch (exit_code) {
             .Exited => |code| {
                 if (code != 0) {
@@ -145,6 +151,29 @@ pub fn release(
     const dur = try fmt.gray(alloc, raw_dur, global_flags.color);
     defer alloc.free(dur);
 
+    var out_dir_files = try std.fs.openDirAbsolute(general_release_ctx.out_path, .{ .iterate = true });
+    defer out_dir_files.close();
+
+    var files = try out_dir_files.walk(alloc);
+    defer files.deinit();
+
+    if (general_release_ctx.checksums.checksums.enabled) {
+        var checksum_timer = try std.time.Timer.start();
+        try release_runner.write_checksums_content_of(alloc, general_release_ctx.out_path, &files, general_release_ctx.checksums);
+        const checksum_elapsed_ns = checksum_timer.read();
+
+        const checksum_raw_dur = try fmt.fmt_pure_duration(alloc, checksum_elapsed_ns);
+        defer alloc.free(checksum_raw_dur);
+
+        const checksum_dur = try fmt.gray(alloc, checksum_raw_dur, global_flags.color);
+        defer alloc.free(checksum_dur);
+
+        if (global_flags.verbose) {
+            try io.stdout.print("{s} Checksums file '{s}' created {s}\n", .{ io.ok_fmt, general_release_ctx.checksums.checksums.file, checksum_dur });
+        } else {
+            try io.stdout.print("\n{s} Checksums file '{s}' created {s}", .{ io.ok_fmt, general_release_ctx.checksums.checksums.file, checksum_dur });
+        }
+    }
     if (global_flags.verbose) {
         try io.stdout.print("{s} Compilation completed! Binaries in: {s} {s}\n", .{ io.ok_fmt, dist_dir_path, dur });
     } else {
