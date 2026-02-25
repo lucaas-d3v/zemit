@@ -1,4 +1,5 @@
 const std = @import("std");
+const hash = std.crypto.hash.sha2;
 
 const arch = @import("../release.zig");
 const checker = @import("../../../../utils/checkers.zig");
@@ -6,6 +7,8 @@ const fmt = @import("../../../../utils/stdout_formatter.zig");
 const utils = @import("../../../../utils/checkers.zig");
 
 const release_enums = @import("./release_enums.zig");
+const generals_enums = @import("../../../../utils/general_enums.zig");
+
 pub const parser = @import("../../../../customization/name_template_parser.zig");
 const config = @import("../../../../customization/config_reader.zig");
 
@@ -17,16 +20,11 @@ const SpinnerState = struct {
 // orchestrates the compilation, progress reporting, and final binary relocation
 pub fn compile_and_move(
     release_ctx: *release_enums.ReleaseCtx,
+    io: *generals_enums.Io,
     i: usize,
 ) !std.process.Child.Term {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
-
-    const error_fmt = try fmt.red(release_ctx.alloc, "ERROR", release_ctx.color);
-    defer release_ctx.alloc.free(error_fmt);
-
-    const warn_fmt = try fmt.yellow(release_ctx.alloc, "WARN", release_ctx.color);
-    defer release_ctx.alloc.free(warn_fmt);
 
     const arch_name = release_ctx.architecture.asString();
     const sep = std.fs.path.sep;
@@ -72,13 +70,12 @@ pub fn compile_and_move(
     const dur = try fmt.fmt_duration(release_ctx, elapsed_ns);
     defer release_ctx.alloc.free(dur);
 
-    const ok_fmt = try fmt.green(release_ctx.alloc, "ok", release_ctx.color);
-    defer release_ctx.alloc.free(ok_fmt);
+    // generate hash and write in checksums_builder
 
     if (release_ctx.verbose) {
-        try stdout.print("Status: {s} {s}\n", .{ ok_fmt, dur });
+        try stdout.print("Status: {s} {s}\n", .{ io.ok_fmt, dur });
     } else {
-        try stdout.print("[{d}/{d}] {s} {s} {s}\n", .{ i, release_ctx.total, arch_name, ok_fmt, dur });
+        try stdout.print("[{d}/{d}] {s} {s} {s}\n", .{ i, release_ctx.total, arch_name, io.ok_fmt, dur });
     }
 
     if (release_ctx.verbose) try stdout.print("\n", .{});
@@ -105,9 +102,9 @@ pub fn compile_and_move(
     };
 
     var io_ctx = release_enums.IoCtx{
-        .ok_fmt = ok_fmt,
-        .warn_fmt = warn_fmt,
-        .error_fmt = error_fmt,
+        .ok_fmt = io.ok_fmt,
+        .warn_fmt = io.warn_fmt,
+        .error_fmt = io.error_fmt,
 
         .source_bin = "",
 
@@ -321,4 +318,68 @@ pub fn move_and_delete_temp_dir(io_ctx: release_enums.IoCtx) !void {
     std.fs.cwd().deleteTree(io_ctx.temp_prefix) catch |err| {
         try io_ctx.stderr.print("{s}: Unable to remove temporary directory: {}\n", .{ io_ctx.warn_fmt, err });
     };
+}
+
+pub fn write_checksums_content_of(alloc: std.mem.Allocator, sub_path: []const u8, files: *std.fs.Dir.Walker, checksums: release_enums.ChecksumsCtx) !void {
+    const is_sha256 = std.mem.eql(u8, checksums.checksums.algorithm, "sha256");
+    const is_sha512 = std.mem.eql(u8, checksums.checksums.algorithm, "sha512");
+
+    while (try files.next()) |entry| {
+        if (entry.kind != .file) {
+            continue;
+        }
+
+        const file = try entry.dir.openFile(entry.basename, .{});
+        defer file.close();
+
+        var buffer: [4096]u8 = undefined;
+
+        if (is_sha256) {
+            var hasher = hash.Sha256.init(.{});
+
+            while (true) {
+                const bytes_read = try file.read(&buffer);
+                if (bytes_read == 0) break;
+                hasher.update(buffer[0..bytes_read]);
+            }
+
+            var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+            hasher.final(&digest);
+
+            try format_and_write(alloc, &digest, entry.basename, checksums);
+        } else if (is_sha512) {
+            var hasher = hash.Sha512.init(.{});
+
+            while (true) {
+                const bytes_read = try file.read(&buffer);
+                if (bytes_read == 0) break;
+                hasher.update(buffer[0..bytes_read]);
+            }
+
+            var digest: [std.crypto.hash.sha2.Sha512.digest_length]u8 = undefined;
+            hasher.final(&digest);
+
+            try format_and_write(alloc, &digest, entry.basename, checksums);
+        }
+    }
+
+    try save_file(alloc, sub_path, checksums);
+}
+
+fn format_and_write(alloc: std.mem.Allocator, digest: []const u8, file_name: []const u8, checksums: release_enums.ChecksumsCtx) !void {
+    const content = try std.fmt.allocPrint(alloc, "{s} {s}\n", .{ std.fmt.fmtSliceHexLower(digest), std.fs.path.basename(file_name) });
+    defer alloc.free(content);
+
+    _ = try checksums.checksums_writer.write(content);
+}
+
+fn save_file(alloc: std.mem.Allocator, sub_path: []const u8, checksums: release_enums.ChecksumsCtx) !void {
+    const out_path = try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{ sub_path, std.fs.path.sep, checksums.checksums.file });
+    defer alloc.free(out_path);
+
+    const out_file = try std.fs.cwd().createFile(out_path, .{});
+    defer out_file.close();
+
+    try out_file.writeAll(checksums.checksums_builder.items);
+    try out_file.writeAll("\n");
 }

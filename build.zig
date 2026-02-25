@@ -29,7 +29,7 @@ pub fn build(b: *std.Build) void {
 
     // build-time constants injection
     const opts = b.addOptions();
-    opts.addOption([]const u8, "zemit_version", "0.2.3");
+    opts.addOption([]const u8, "zemit_version", "0.2.4");
     exe.root_module.addImport("build_options", opts.createModule());
 
     // installation
