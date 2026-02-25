@@ -10,14 +10,14 @@ targets = [
     "x86_64-linux-musl",
     "aarch64-linux-gnu",
     "aarch64-linux-musl",
-    # "arm-linux-gnueabihf",
-    # "arm-linux-musleabihf",
-    # "riscv64-linux-gnu",
-    # "riscv64-linux-musl",
-    # "x86_64-windows-gnu",
-    # "x86_64-windows-msvc",
-    # "x86_64-macos",
-    # "aarch64-macos",
+    "arm-linux-gnueabihf",
+    "arm-linux-musleabihf",
+    "riscv64-linux-gnu",
+    "riscv64-linux-musl",
+    "x86_64-windows-gnu",
+    "x86_64-windows-msvc",
+    "x86_64-macos",
+    "aarch64-macos",
 ]
 
 
