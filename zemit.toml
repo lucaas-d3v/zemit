@@ -2,7 +2,7 @@
 
 [build]
 optimize = "ReleaseSmall"
-zig_args = ["-Dstrip=true"]
+zig_args = [""]
 
 [release]
 targets = [
