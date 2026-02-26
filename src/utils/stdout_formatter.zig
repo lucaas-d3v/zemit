@@ -1,74 +1,70 @@
 const std = @import("std");
-const release_enums = @import("../cli/commands/release/release_utils/release_enums.zig");
 
-// --- ANSI Color Wrappers ---
+const COLOR_CYAN = "\x1b[36m";
+const COLOR_GREEN = "\x1b[32m";
+const COLOR_RED = "\x1b[31m";
+const COLOR_YELLOW = "\x1b[33m";
+const COLOR_GRAY = "\x1b[90m";
+const COLOR_RESET = "\x1b[0m";
 
-// returns a raw ANSI color escape sequence
-fn code(comptime c: []const u8) []const u8 {
-    return c;
+pub fn writeColored(writer: std.io.AnyWriter, comptime color_code: []const u8, text: []const u8, enabled: bool) !void {
+    if (enabled) try writer.writeAll(color_code);
+    try writer.writeAll(text);
+    if (enabled) try writer.writeAll(COLOR_RESET);
 }
 
-// wraps the given text with an ANSI escape sequence and a reset code if enabled
-fn wrap(
-    alloc: std.mem.Allocator,
-    txt: []const u8,
-    start: []const u8,
-    enabled: bool,
-) ![]u8 {
-    if (!enabled) return try alloc.dupe(u8, txt);
-    return try std.fmt.allocPrint(alloc, "{s}{s}\x1b[0m", .{ start, txt });
+pub fn printCyan(writer: std.io.AnyWriter, text: []const u8, enabled: bool) !void {
+    try writeColored(writer, COLOR_CYAN, text, enabled);
 }
 
-// formats text with cyan color
-pub fn cyan(alloc: std.mem.Allocator, txt: []const u8, enabled: bool) ![]u8 {
-    return wrap(alloc, txt, code("\x1b[36m"), enabled);
+pub fn printGreen(writer: std.io.AnyWriter, text: []const u8, enabled: bool) !void {
+    try writeColored(writer, COLOR_GREEN, text, enabled);
 }
 
-// formats text with green color
-pub fn green(alloc: std.mem.Allocator, txt: []const u8, enabled: bool) ![]u8 {
-    return wrap(alloc, txt, code("\x1b[32m"), enabled);
+pub fn allocGreenText(alloc: std.mem.Allocator, text: []const u8, enabled: bool) ![]u8 {
+    if (!enabled) return try alloc.dupe(u8, text);
+    return try std.fmt.allocPrint(alloc, "\x1b[32m{s}\x1b[0m", .{text});
 }
 
-// formats text with red color
-pub fn red(alloc: std.mem.Allocator, txt: []const u8, enabled: bool) ![]u8 {
-    return wrap(alloc, txt, code("\x1b[31m"), enabled);
+pub fn printRed(writer: std.io.AnyWriter, text: []const u8, enabled: bool) !void {
+    try writeColored(writer, COLOR_RED, text, enabled);
 }
 
-// formats text with yellow color
-pub fn yellow(alloc: std.mem.Allocator, txt: []const u8, enabled: bool) ![]u8 {
-    return wrap(alloc, txt, code("\x1b[33m"), enabled);
+pub fn allocRedText(alloc: std.mem.Allocator, text: []const u8, enabled: bool) ![]u8 {
+    if (!enabled) return try alloc.dupe(u8, text);
+    return try std.fmt.allocPrint(alloc, "\x1b[31m{s}\x1b[0m", .{text});
 }
 
-// formats text with gray color
-pub fn gray(alloc: std.mem.Allocator, txt: []const u8, enabled: bool) ![]u8 {
-    return wrap(alloc, txt, code("\x1b[90m"), enabled);
+pub fn printYellow(writer: std.io.AnyWriter, text: []const u8, enabled: bool) !void {
+    try writeColored(writer, COLOR_YELLOW, text, enabled);
 }
 
-// --- Duration Formatting ---
+pub fn allocYellowText(alloc: std.mem.Allocator, text: []const u8, enabled: bool) ![]u8 {
+    if (!enabled) return try alloc.dupe(u8, text);
+    return try std.fmt.allocPrint(alloc, "\x1b[33m{s}\x1b[0m", .{text});
+}
 
-// converts nanoseconds into a human-readable string without colors
-pub fn fmt_pure_duration(alloc: std.mem.Allocator, elapsed_ns: u64) ![]u8 {
+pub fn printGray(writer: std.io.AnyWriter, text: []const u8, enabled: bool) !void {
+    try writeColored(writer, COLOR_GRAY, text, enabled);
+}
+
+pub fn printDuration(writer: anytype, elapsed_ns: u64, enabled: bool) !void {
     const total_s = elapsed_ns / 1_000_000_000;
     const h = total_s / 3600;
     const m = (total_s / 60) % 60;
     const s = total_s % 60;
 
-    if (h > 0) return try std.fmt.allocPrint(alloc, "({d}h {d}m {d}s)", .{ h, m, s });
-    if (m > 0) return try std.fmt.allocPrint(alloc, "({d}m {d}s)", .{ m, s });
+    var buf: [64]u8 = undefined;
+    var pure_dur: []u8 = &[_]u8{};
 
-    const frac: f64 = @as(f64, @floatFromInt(elapsed_ns)) / 1e9;
-    return try std.fmt.allocPrint(alloc, "({d:.2}s)", .{frac});
-}
+    if (h > 0) {
+        pure_dur = try std.fmt.bufPrint(&buf, "({d}h {d}m {d}s)", .{ h, m, s });
+    } else if (m > 0) {
+        pure_dur = try std.fmt.bufPrint(&buf, "({d}m {d}s)", .{ m, s });
+    } else {
+        const frac: f64 = @as(f64, @floatFromInt(elapsed_ns)) / 1e9;
+        pure_dur = try std.fmt.bufPrint(&buf, "({d:.2}s)", .{frac});
+    }
 
-// formats and colors the duration based on the release context settings
-pub fn fmt_duration(release_ctx: *release_enums.ReleaseCtx, elapsed_ns: u64) ![]const u8 {
-    const ctx = release_ctx;
-
-    const dur_raw = try fmt_pure_duration(ctx.alloc, elapsed_ns);
-    defer ctx.alloc.free(dur_raw);
-
-    const dur = try gray(ctx.alloc, dur_raw, ctx.color);
-    errdefer ctx.alloc.free(dur);
-
-    return dur;
+    try writeColored(writer, COLOR_GRAY, pure_dur, enabled);
 }
