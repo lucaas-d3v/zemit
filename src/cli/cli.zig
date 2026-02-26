@@ -9,6 +9,7 @@ const helps = @import("./commands/generics/help_command.zig");
 const version = @import("./commands/generics/version.zig");
 const release = @import("./commands/release/release.zig");
 const clean = @import("./commands/clean/clean.zig");
+const init = @import("./commands/init/init.zig");
 const test_cmd = @import("./commands/test/test.zig");
 
 pub fn runCli(alloc: std.mem.Allocator) !void {
@@ -101,7 +102,12 @@ pub fn runCli(alloc: std.mem.Allocator) !void {
     }
 
     if (checker.strEquals(cmd, "clean")) {
-        try clean.runClean(alloc, global_flags, &args, io, "zemit.toml");
+        try clean.runClean(alloc, global_flags, &args, io, config_parsed);
+        return;
+    }
+
+    if (checker.strEquals(cmd, "init")) {
+        try init.runInit(&args, io);
         return;
     }
 

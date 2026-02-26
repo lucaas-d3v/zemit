@@ -4,13 +4,10 @@ const checker = @import("../../../utils/checkers.zig");
 const helps = @import("../../commands/generics/help_command.zig");
 const general_enums = @import("../../../utils/general_enums.zig");
 
-pub fn runClean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlags, args: *std.process.ArgIterator, io: general_enums.Io, toml_path: []const u8) !void {
+pub fn runClean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlags, args: *std.process.ArgIterator, io: general_enums.Io, config: reader.toml.Parsed(reader.Config)) !void {
     var dry_run = false;
 
-    const config_parsed = reader.loadConfig(alloc, toml_path, io) catch return;
-    defer config_parsed.deinit();
-
-    const zemit_dir = config_parsed.value.dist.dir;
+    const zemit_dir = config.value.dist.dir;
     const path = try std.fmt.allocPrint(alloc, "       Clears the output directory of multi-targets in '{s}'", .{zemit_dir});
     defer alloc.free(path);
 
