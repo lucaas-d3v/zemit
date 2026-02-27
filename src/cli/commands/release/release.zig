@@ -80,11 +80,11 @@ pub fn runRelease(
     if (global_flags.color) {
         const total_as_str = try std.fmt.allocPrint(alloc, "{d}", .{total});
         defer alloc.free(total_as_str);
-        try io.stdout.print("\nStarting release for ", .{});
+        try io.stdout.print("Starting release for ", .{});
         try fmt.printCyan(io.stdout, total_as_str, global_flags.color);
         try io.stdout.print(" targets...\n\n", .{});
     } else {
-        try io.stdout.print("\nStarting release for {d} targets...\n\n", .{total});
+        try io.stdout.print("Starting release for {d} targets...\n\n", .{total});
     }
 
     var build_timer = try std.time.Timer.start();
