@@ -21,7 +21,6 @@ pub fn runInit(
     const default_config_content =
         \\[build]
         \\optimize = "ReleaseSmall"
-        \\zig_args = [""]
         \\
         \\[release]
         \\targets = [
@@ -40,7 +39,7 @@ pub fn runInit(
         \\]
         \\
         \\[dist]
-        \\dir = "zemit/docs"
+        \\dir = "zemit/dist"
         \\layout = "by_target"
         \\name_template = "{bin}-{version}-{target}{ext}"
         \\

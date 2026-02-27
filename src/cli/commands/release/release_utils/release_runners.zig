@@ -245,6 +245,7 @@ pub fn writeChecksumsContentOf(alloc: std.mem.Allocator, sub_path: []const u8, f
 
     while (try files.next()) |entry| {
         if (entry.kind != .file) continue;
+        if (std.mem.eql(u8, entry.basename, checksums.file)) continue;
 
         const file = try entry.dir.openFile(entry.basename, .{});
         defer file.close();

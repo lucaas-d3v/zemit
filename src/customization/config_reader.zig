@@ -145,6 +145,7 @@ pub fn loadConfig(allocator: std.mem.Allocator, toml_path: []const u8, io: gener
             try io.stderr.print("{s}: Configuration file '{s}' not found.\nHint: Create a 'zemit.toml' file in the root of your project.\n", .{ io.error_fmt, toml_path });
             return error.ConfigNotFound;
         }
+
         try io.stderr.print("{s}: Unable to open '{s}': {}\n", .{ io.error_fmt, toml_path, err });
         return err;
     };
@@ -156,13 +157,15 @@ pub fn loadConfig(allocator: std.mem.Allocator, toml_path: []const u8, io: gener
     const file_content = try file.readToEndAlloc(allocator, 1024 * 1024);
     defer allocator.free(file_content);
 
-    return parser.parseString(file_content) catch {
+    return parser.parseString(file_content) catch |parse_err| {
         try io.stderr.print("{s}: TOML syntax error in '{s}'.\n", .{ io.error_fmt, toml_path });
-        if (parser.error_info) |err| {
-            try io.stderr.print("Reason:\n", .{});
-            for (err.struct_mapping) |value| try io.stderr.print("{s}\n", .{value});
-            try io.stderr.print("\nAt line {d} and column {d}\n", .{ err.parse.line, err.parse.pos });
+
+        try io.stderr.print("Reason: {s}\n", .{@errorName(parse_err)});
+
+        if (parser.error_info) |info| {
+            try io.stderr.print("Location: Line {d}, Column {d}\n", .{ info.parse.line, info.parse.pos });
         }
+
         return error.ParseFailed;
     };
 }

@@ -43,13 +43,9 @@ pub fn runCli(alloc: std.mem.Allocator) !void {
         .warn_fmt = warn_fmt,
     };
 
-    const toml_path = "zemit.toml";
-    const config_parsed = reader.loadConfig(alloc, toml_path, io) catch return;
-    defer config_parsed.deinit();
-
     while (args.next()) |arg| {
         if (checker.cliArgsEquals(arg, &.{ "-h", "--help" })) {
-            helps.help(io, config_parsed);
+            helps.help(io);
             return;
         }
 
@@ -73,9 +69,19 @@ pub fn runCli(alloc: std.mem.Allocator) !void {
     }
 
     const cmd = command orelse {
-        helps.help(io, config_parsed);
+        helps.help(io);
         return;
     };
+
+    // especial case
+    if (checker.strEquals(cmd, "init")) {
+        try init.runInit(&args, io);
+        return;
+    }
+
+    const toml_path = "zemit.toml";
+    const config_parsed = reader.loadConfig(alloc, toml_path, io) catch return;
+    defer config_parsed.deinit();
 
     var release_ctx = release_enums.ReleaseCtx{
         .alloc = alloc,
@@ -106,16 +112,11 @@ pub fn runCli(alloc: std.mem.Allocator) !void {
         return;
     }
 
-    if (checker.strEquals(cmd, "init")) {
-        try init.runInit(&args, io);
-        return;
-    }
-
     if (checker.strEquals(cmd, "test")) {
         try test_cmd.runTest(alloc, toml_path, &release_ctx, io);
         return;
     }
 
-    helps.help(io, config_parsed);
+    helps.help(io);
     try io.stderr.print("\nError: Unknown command '{s}'\n", .{cmd});
 }
