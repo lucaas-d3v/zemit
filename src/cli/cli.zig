@@ -1,81 +1,38 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const build_options = @import("build_options");
-
-// internals
 const checker = @import("../utils/checkers.zig");
 const generals_enums = @import("../utils/general_enums.zig");
 const release_enums = @import("../cli/commands/release/release_utils/release_enums.zig");
 const reader = @import("../customization/config_reader.zig");
 const fmt = @import("../utils/stdout_formatter.zig");
-
-// commands
 const helps = @import("./commands/generics/help_command.zig");
 const version = @import("./commands/generics/version.zig");
 const release = @import("./commands/release/release.zig");
 const clean = @import("./commands/clean/clean.zig");
+const init = @import("./commands/init/init.zig");
+const test_cmd = @import("./commands/test/test.zig");
 
-// main entry point of the command line interface
-pub fn cli(alloc: std.mem.Allocator) !void {
+pub fn runCli(alloc: std.mem.Allocator) !void {
     var args = try std.process.argsWithAllocator(alloc);
     defer args.deinit();
 
-    _ = args.next(); // bin name
+    _ = args.next();
 
     var command: ?[]const u8 = null;
-
-    const is_tty = checker.is_TTY();
-    var color = is_tty;
-
-    const env_no_color = std.process.getEnvVarOwned(alloc, "NO_COLOR") catch null;
-    if (env_no_color) |val| {
-        defer alloc.free(val);
-        color = false;
-    }
+    const color = checker.isColor(alloc);
 
     var global_flags = generals_enums.GlobalFlags{
         .color = color,
         .verbose = false,
     };
 
-    // global flags
-    while (args.next()) |arg| {
-        if (checker.cli_args_equals(arg, &.{ "-h", "--help" })) {
-            helps.help(alloc);
-            return;
-        }
-
-        if (checker.cli_args_equals(arg, &.{ "-V", "--version" })) {
-            version.version(build_options.zemit_version);
-            return;
-        }
-
-        if (checker.cli_args_equals(arg, &.{ "-v", "--verbose" })) {
-            global_flags.verbose = true;
-            continue;
-        }
-
-        if (checker.cli_args_equals(arg, &.{ "-nc", "--no-color" })) {
-            global_flags.color = false;
-            continue;
-        }
-
-        command = arg;
-        break;
-    }
-
-    const cmd = command orelse {
-        helps.help(alloc);
-        return;
-    };
-
-    const error_fmt = try fmt.red(alloc, "ERROR", global_flags.color);
+    const error_fmt = try fmt.allocRedText(alloc, "ERROR", global_flags.color);
     defer alloc.free(error_fmt);
 
-    const ok_fmt = try fmt.green(alloc, "✓", global_flags.color);
+    const ok_fmt = try fmt.allocGreenText(alloc, "✓", global_flags.color);
     defer alloc.free(ok_fmt);
 
-    const warn_fmt = try fmt.yellow(alloc, "WARN", global_flags.color);
+    const warn_fmt = try fmt.allocYellowText(alloc, "WARN", global_flags.color);
     defer alloc.free(warn_fmt);
 
     var io = generals_enums.Io{
@@ -86,64 +43,80 @@ pub fn cli(alloc: std.mem.Allocator) !void {
         .warn_fmt = warn_fmt,
     };
 
-    const toml_path = "zemit.toml";
-    const config_parsed = reader.load(alloc, toml_path) catch |err| {
-        std.log.err("{s}: Failed to parse '{s}', check the syntaxe", .{ error_fmt, toml_path });
-        return err;
-    };
-    defer config_parsed.deinit();
+    while (args.next()) |arg| {
+        if (checker.cliArgsEquals(arg, &.{ "-h", "--help" })) {
+            helps.help(io);
+            return;
+        }
 
-    const layout = try checker.to_release_layout(config_parsed.value.dist.layout, io.stderr, io.error_fmt);
-    if (layout == .none) {
+        if (checker.cliArgsEquals(arg, &.{ "-V", "--version" })) {
+            version.printVersion(build_options.zemit_version);
+            return;
+        }
+
+        if (checker.cliArgsEquals(arg, &.{ "-v", "--verbose" })) {
+            global_flags.verbose = true;
+            continue;
+        }
+
+        if (checker.cliArgsEquals(arg, &.{ "-nc", "--no-color" })) {
+            global_flags.color = false;
+            continue;
+        }
+
+        command = arg;
+        break;
+    }
+
+    const cmd = command orelse {
+        helps.help(io);
+        return;
+    };
+
+    // especial case
+    if (checker.strEquals(cmd, "init")) {
+        try init.runInit(&args, io);
         return;
     }
 
+    const toml_path = "zemit.toml";
+    const config_parsed = reader.loadConfig(alloc, toml_path, io) catch return;
+    defer config_parsed.deinit();
+
     var release_ctx = release_enums.ReleaseCtx{
         .alloc = alloc,
-
-        .architecture = release_enums.Architectures.none,
-
+        .architecture = .none,
         .out_path = "",
         .full_path = "",
         .bin_name = "",
         .version = build_options.zemit_version,
-
         .d_optimize = config_parsed.value.build.optimize,
         .zig_args = config_parsed.value.build.zig_args,
-
-        .layout = layout,
+        .layout = config_parsed.value.dist.layout,
         .name_tamplate = config_parsed.value.dist.name_template,
-
+        .checksums = config_parsed.value.checksums,
         .verbose = global_flags.verbose,
         .total = 0,
         .color = global_flags.color,
     };
 
-    // validate
-    if (!(try config_parsed.value.is_ok(alloc, &release_ctx))) {
+    if (!(try config_parsed.value.isOk(alloc, &release_ctx, io))) return;
+
+    if (checker.strEquals(cmd, "release")) {
+        try release.runRelease(alloc, global_flags, io, &args, release_ctx, config_parsed);
         return;
     }
 
-    // dispatch
-    if (checker.str_equals(cmd, "release")) {
-        release.release(alloc, global_flags, &io, &args, release_ctx, config_parsed) catch |err| {
-            switch (err) {
-                error.InvalidConfig => try io.stderr.print("Check your zemit.toml.\n", .{}),
-                else => {},
-            }
-
-            return;
-        };
-
+    if (checker.strEquals(cmd, "clean")) {
+        try clean.runClean(alloc, global_flags, &args, io, config_parsed);
         return;
     }
 
-    if (checker.str_equals(cmd, "clean")) {
-        try clean.clean(alloc, global_flags, &args, "zemit.toml");
+    if (checker.strEquals(cmd, "test")) {
+        try test_cmd.runTest(alloc, toml_path, &release_ctx, io);
         return;
     }
 
-    helps.help(alloc);
-    const stderr = std.io.getStdErr().writer();
-    try stderr.print("\nError: Unknown command '{s}'\n", .{cmd});
+    helps.help(io);
+    try io.stderr.print("\nError: Unknown command '{s}'\n", .{cmd});
 }

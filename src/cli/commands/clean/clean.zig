@@ -1,70 +1,42 @@
 const std = @import("std");
-
-// internals
 const reader = @import("../../../customization/config_reader.zig");
-const fmt = @import("../../../utils/stdout_formatter.zig");
-
-const utils = @import("../../../utils/checkers.zig");
 const checker = @import("../../../utils/checkers.zig");
 const helps = @import("../../commands/generics/help_command.zig");
 const general_enums = @import("../../../utils/general_enums.zig");
 
-// removes the distribution directory or lists files that would be removed
-pub fn clean(
-    alloc: std.mem.Allocator,
-    global_flags: general_enums.GlobalFlags,
-    args: *std.process.ArgIterator,
-    toml_path: []const u8,
-) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
-
+pub fn runClean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlags, args: *std.process.ArgIterator, io: general_enums.Io, config: reader.toml.Parsed(reader.Config)) !void {
     var dry_run = false;
 
-    const error_fmt = try fmt.red(alloc, "ERROR", global_flags.color);
-    defer alloc.free(error_fmt);
-
-    const ok_fmt = try fmt.green(alloc, "✓", global_flags.color);
-    defer alloc.free(ok_fmt);
-
-    const config_parsed = reader.load(alloc, toml_path) catch |err| {
-        try stderr.print("{s}: Failed to parse '{s}', check the syntaxe", .{ error_fmt, toml_path });
-        return err;
-    };
-    defer config_parsed.deinit();
-
-    const zemit_dir = config_parsed.value.dist.dir;
+    const zemit_dir = config.value.dist.dir;
     const path = try std.fmt.allocPrint(alloc, "       Clears the output directory of multi-targets in '{s}'", .{zemit_dir});
     defer alloc.free(path);
 
-    // parse command flags
     while (args.next()) |flag| {
-        if (checker.cli_args_equals(flag, &.{ "-h", "--help" })) {
-            helps.helpOf("clean", &.{ "", "-d, --dry-run", "-h, --help" }, &.{ path, "Preview of what will be cleaned", "Show this help log." });
+        if (checker.cliArgsEquals(flag, &.{ "-h", "--help" })) {
+            helps.helpOf("clean", &.{ "", "-d, --dry-run", "-h, --help" }, &.{ path, "Preview of what will be cleaned", "Show this help log." }, io);
             return;
         }
 
-        if (checker.cli_args_equals(flag, &.{ "-d", "--dry-run" })) {
+        if (checker.cliArgsEquals(flag, &.{ "-d", "--dry-run" })) {
             dry_run = true;
             continue;
         }
 
-        helps.helpOf("clean", &.{ "", "-d, --dry-run", "-h, --help" }, &.{ path, "Preview of what will be cleaned", "Show this help log." });
-        try stderr.print("Unknown flag for command clean: '{s}'\nUse -h or --help to see options.\n", .{flag});
+        helps.helpOf("clean", &.{ "", "-d, --dry-run", "-h, --help" }, &.{ path, "Preview of what will be cleaned", "Show this help log." }, io);
+        try io.stderr.print("Unknown flag for command clean: '{s}'\nUse -h or --help to see options.\n", .{flag});
         return;
     }
 
     var current_dir = try std.fs.cwd().openDir(".", .{});
     defer current_dir.close();
 
-    try checker.validate_dist_dir_stop_if_not(alloc, zemit_dir, stderr.any(), global_flags.color);
+    try checker.validateDistDirStopIfNot(zemit_dir, io);
 
-    // preview removal if dry-run is enabled
     if (dry_run) {
         const sep = std.fs.path.sep;
         var out_dir = current_dir.openDir(zemit_dir, .{ .iterate = true }) catch |err| {
             if (err == error.FileNotFound) {
-                try stdout.print("Nothing to clean: '{s}' does not exist.\n", .{zemit_dir});
+                try io.stdout.print("Nothing to clean: '{s}' does not exist.\n", .{zemit_dir});
                 return;
             }
             return err;
@@ -75,34 +47,29 @@ pub fn clean(
         defer iter.deinit();
 
         while (try iter.next()) |entry| {
-            if (entry.kind == .directory) {
-                continue;
-            }
-
-            try stdout.print("Would be removed: ", .{});
-            try stdout.print("'{s}{c}{s}'\n", .{ zemit_dir, sep, entry.path });
+            if (entry.kind == .directory) continue;
+            try io.stdout.print("Would be removed: '{s}{c}{s}'\n", .{ zemit_dir, sep, entry.path });
         }
         return;
     }
 
-    // execute directory removal
     current_dir.access(zemit_dir, .{}) catch |err| switch (err) {
         error.FileNotFound => {
-            try stdout.print("Nothing to clean: '{s}' directory not found.\n", .{zemit_dir});
+            try io.stdout.print("Nothing to clean: '{s}' directory not found.\n", .{zemit_dir});
             return;
         },
         else => return err,
     };
 
-    try stdout.print("Cleaning output directory: '{s}'\n", .{zemit_dir});
+    try io.stdout.print("Cleaning output directory: '{s}'\n", .{zemit_dir});
     current_dir.deleteTree(zemit_dir) catch |err| {
-        try stderr.print("{s}: Failed to clean directory '{s}': {}\n", .{ error_fmt, zemit_dir, err });
+        try io.stderr.print("{s}: Failed to clean directory '{s}': {}\n", .{ io.error_fmt, zemit_dir, err });
         return;
     };
 
     if (global_flags.verbose) {
-        try stdout.print("{s} Cleaned: '{s}'\n", .{ ok_fmt, zemit_dir });
+        try io.stdout.print("{s} Cleaned: '{s}'\n", .{ io.ok_fmt, zemit_dir });
     } else {
-        try stdout.print("\n{s} Cleaned: '{s}'!\n", .{ ok_fmt, zemit_dir });
+        try io.stdout.print("\n{s} Cleaned: '{s}'!\n", .{ io.ok_fmt, zemit_dir });
     }
 }

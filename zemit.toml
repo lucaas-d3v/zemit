@@ -2,12 +2,11 @@
 
 [build]
 optimize = "ReleaseSmall"
-zig_args = ["-Dstrip=true"]
 
 [release]
 targets = [
     "x86_64-linux-gnu",
-    # "x86_64-linux-musl",
+    "x86_64-linux-musl",
     # "aarch64-linux-gnu",
     # "aarch64-linux-musl",
     # "arm-linux-gnueabihf",
@@ -29,5 +28,5 @@ name_template = "{bin}-{version}-{target}{ext}"
 
 [checksums]
 enabled = true
-algorithms = ["sha256"]
+algorithm = "sha256"
 file = "checksums.txt"
