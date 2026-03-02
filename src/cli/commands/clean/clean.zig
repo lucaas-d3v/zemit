@@ -13,7 +13,7 @@ pub fn runClean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlag
 
     while (args.next()) |flag| {
         if (checker.cliArgsEquals(flag, &.{ "-h", "--help" })) {
-            helps.helpOf("clean", &.{ "", "-d, --dry-run", "-h, --help" }, &.{ path, "Preview of what will be cleaned", "Show this help log." }, io);
+            try helps.helpOf("clean", &.{ "", "-d, --dry-run", "-h, --help" }, &.{ path, "Preview of what will be cleaned", "Show this help log." }, io);
             return;
         }
 
@@ -22,8 +22,10 @@ pub fn runClean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlag
             continue;
         }
 
-        helps.helpOf("clean", &.{ "", "-d, --dry-run", "-h, --help" }, &.{ path, "Preview of what will be cleaned", "Show this help log." }, io);
+        try helps.helpOf("clean", &.{ "", "-d, --dry-run", "-h, --help" }, &.{ path, "Preview of what will be cleaned", "Show this help log." }, io);
         try io.stderr.print("Unknown flag for command clean: '{s}'\nUse -h or --help to see options.\n", .{flag});
+        _ = try io.stderr.flush();
+
         return;
     }
 
@@ -37,6 +39,7 @@ pub fn runClean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlag
         var out_dir = current_dir.openDir(zemit_dir, .{ .iterate = true }) catch |err| {
             if (err == error.FileNotFound) {
                 try io.stdout.print("Nothing to clean: '{s}' does not exist.\n", .{zemit_dir});
+                _ = try io.stderr.flush();
                 return;
             }
             return err;
@@ -49,6 +52,7 @@ pub fn runClean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlag
         while (try iter.next()) |entry| {
             if (entry.kind == .directory) continue;
             try io.stdout.print("Would be removed: '{s}{c}{s}'\n", .{ zemit_dir, sep, entry.path });
+            _ = try io.stdout.flush();
         }
         return;
     }
@@ -56,6 +60,7 @@ pub fn runClean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlag
     current_dir.access(zemit_dir, .{}) catch |err| switch (err) {
         error.FileNotFound => {
             try io.stdout.print("Nothing to clean: '{s}' directory not found.\n", .{zemit_dir});
+            _ = try io.stderr.flush();
             return;
         },
         else => return err,
@@ -64,12 +69,16 @@ pub fn runClean(alloc: std.mem.Allocator, global_flags: general_enums.GlobalFlag
     try io.stdout.print("Cleaning output directory: '{s}'\n", .{zemit_dir});
     current_dir.deleteTree(zemit_dir) catch |err| {
         try io.stderr.print("{s}: Failed to clean directory '{s}': {}\n", .{ io.error_fmt, zemit_dir, err });
+        _ = try io.stderr.flush();
         return;
     };
+    _ = try io.stdout.flush();
 
     if (global_flags.verbose) {
         try io.stdout.print("{s} Cleaned: '{s}'\n", .{ io.ok_fmt, zemit_dir });
     } else {
         try io.stdout.print("\n{s} Cleaned: '{s}'!\n", .{ io.ok_fmt, zemit_dir });
     }
+
+    _ = try io.stderr.flush();
 }

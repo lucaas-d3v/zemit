@@ -46,7 +46,7 @@ pub fn contains(str_a: []const u8, expected_str: []const u8) bool {
 }
 
 pub fn isTty() bool {
-    return std.posix.isatty(std.io.getStdOut().handle);
+    return std.posix.isatty(std.fs.File.stdout().handle);
 }
 
 pub fn isColor(alloc: std.mem.Allocator) bool {
@@ -110,6 +110,8 @@ fn comunicateError(err: release_enums.DistDirError, io: generals_enums.Io) !void
         error.BackslashNotAllowed => try io.stderr.print("{s}: dist.dir cannot contain '\\\\'.\n", .{io.error_fmt}),
         error.InvalidByte => try io.stderr.print("{s}: dist.dir contains invalid characters.\n", .{io.error_fmt}),
     }
+
+    _ = try io.stderr.flush();
     return error.InvalidConfig;
 }
 

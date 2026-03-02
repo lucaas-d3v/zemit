@@ -56,9 +56,9 @@ Breaking changes may occur until v1.0.
 
 ---
 
-## Requirements
+## Requirements (to compile by hand)
 
-- Zig **0.13.0** (recommended)
+- Zig **0.15.2**
 
 ---
 

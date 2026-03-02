@@ -35,9 +35,20 @@ pub fn runCli(alloc: std.mem.Allocator) !void {
     const warn_fmt = try fmt.allocYellowText(alloc, "WARN", global_flags.color);
     defer alloc.free(warn_fmt);
 
-    var io = generals_enums.Io{
-        .stdout = std.io.getStdOut().writer().any(),
-        .stderr = std.io.getStdErr().writer().any(),
+    var stdout_buffer: [4096]u8 = undefined;
+    var stderr_buffer: [4096]u8 = undefined;
+
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+
+    defer {
+        _ = stdout_writer.interface.flush() catch {};
+        _ = stderr_writer.interface.flush() catch {};
+    }
+
+    const io = generals_enums.Io{
+        .stdout = &stdout_writer.interface,
+        .stderr = &stderr_writer.interface,
         .error_fmt = error_fmt,
         .ok_fmt = ok_fmt,
         .warn_fmt = warn_fmt,
@@ -45,12 +56,12 @@ pub fn runCli(alloc: std.mem.Allocator) !void {
 
     while (args.next()) |arg| {
         if (checker.cliArgsEquals(arg, &.{ "-h", "--help" })) {
-            helps.help(io);
+            try helps.help(io);
             return;
         }
 
         if (checker.cliArgsEquals(arg, &.{ "-V", "--version" })) {
-            version.printVersion(build_options.zemit_version);
+            try version.printVersion(build_options.zemit_version);
             return;
         }
 
@@ -69,7 +80,7 @@ pub fn runCli(alloc: std.mem.Allocator) !void {
     }
 
     const cmd = command orelse {
-        helps.help(io);
+        try helps.help(io);
         return;
     };
 
@@ -117,6 +128,6 @@ pub fn runCli(alloc: std.mem.Allocator) !void {
         return;
     }
 
-    helps.help(io);
+    try helps.help(io);
     try io.stderr.print("\nError: Unknown command '{s}'\n", .{cmd});
 }

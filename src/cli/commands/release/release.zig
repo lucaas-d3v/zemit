@@ -18,11 +18,15 @@ pub fn runRelease(
     const path = try std.fmt.allocPrint(alloc, "       Compiles multi-target and places correctly named binaries in '{s}'", .{config_parsed.value.dist.dir});
     while (args.next()) |flag| {
         if (checker.cliArgsEquals(flag, &.{ "-h", "--help" })) {
-            helps.helpOf("release", &.{ "", "-h, --help" }, &.{ path, "Show this help log" }, io);
+            try helps.helpOf("release", &.{ "", "-h, --help" }, &.{ path, "Show this help log" }, io);
             return;
         }
-        helps.helpOf("release", &.{ "", "-h, --help" }, &.{ path, "Show this help log" }, io);
+
+        try helps.helpOf("release", &.{ "", "-h, --help" }, &.{ path, "Show this help log" }, io);
+
         try io.stderr.print("\nUnknown flag for command release: '{s}'\nUse -h or --help to see options.\n", .{flag});
+        _ = try io.stderr.flush();
+
         return;
     }
     alloc.free(path);
@@ -33,6 +37,8 @@ pub fn runRelease(
     const archs = config_parsed.value.release.targets;
     if (archs.len == 0) {
         try io.stderr.print("{s}: The architectures list described in 'zemit.toml' cannot be empty.\n", .{io.error_fmt});
+        _ = try io.stderr.flush();
+
         return;
     }
 
@@ -41,6 +47,8 @@ pub fn runRelease(
 
     if (!(try checker.isValidProject(alloc, current_directory))) {
         try io.stderr.print("{s}: you are not in a valid zig project (project generated via `zig init`)\n", .{io.error_fmt});
+        _ = try io.stderr.flush();
+
         return;
     }
 
@@ -86,11 +94,14 @@ pub fn runRelease(
     } else {
         try io.stdout.print("Starting release for {d} targets...\n\n", .{total});
     }
+    _ = try io.stderr.flush();
 
     var build_timer = try std.time.Timer.start();
     for (1.., archs) |i, architecture| {
         const arch_enum = release_enums.Architectures.fromString(architecture) orelse {
             try io.stderr.print("{s}: Unknown architecture: '{s}'\n", .{ io.error_fmt, architecture });
+            _ = try io.stderr.flush();
+
             return;
         };
 
@@ -100,11 +111,15 @@ pub fn runRelease(
             .Exited => |code| {
                 if (code != 0) {
                     try io.stderr.print("{s}: We were unable to compile your binary for '{s}'. exit code: {}\n", .{ io.error_fmt, arch_enum.asString(), code });
+                    _ = try io.stderr.flush();
+
                     return;
                 }
             },
             .Signal, .Stopped, .Unknown => {
                 try io.stderr.print("{s}: Build process for '{s}' stopped or failed.\n", .{ io.error_fmt, arch_enum.asString() });
+                _ = try io.stderr.flush();
+
                 return;
             },
         }
@@ -126,10 +141,14 @@ pub fn runRelease(
         try io.stdout.print("{s}{s} Checksums file '{s}' created ", .{ break_char, io.ok_fmt, general_release_ctx.checksums.file });
         try fmt.printDuration(io.stdout, checksum_elapsed_ns, global_flags.color);
         if (global_flags.verbose) try io.stdout.print("\n", .{});
+
+        _ = try io.stderr.flush();
     }
 
     const start_char = if (global_flags.verbose) "" else "\n";
     try io.stdout.print("{s}{s} Compilation completed! Binaries in: {s} ", .{ start_char, io.ok_fmt, dist_dir_path });
     try fmt.printDuration(io.stdout, elapsed_ns, global_flags.color);
     try io.stdout.print("\n", .{});
+
+    _ = try io.stderr.flush();
 }

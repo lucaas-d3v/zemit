@@ -146,9 +146,9 @@ Example layout:
 ```
 dist/
 x86_64-linux-gnu/
-zemit-0.2.2-x86_64-linux-gnu
+zemit-0.3.0-x86_64-linux-gnu
 x86_64-windows-gnu/
-zemit-0.2.2-x86_64-windows-gnu.exe
+zemit-0.3.0-x86_64-windows-gnu.exe
 ```
 
 This layout preserves target separation and is recommended for multi-platform releases.
@@ -161,8 +161,8 @@ Example layout:
 
 ```
 dist/
-zemit-0.2.2-x86_64-linux-gnu
-zemit-0.2.2-x86_64-windows-gnu.exe
+zemit-0.3.0-x86_64-linux-gnu
+zemit-0.3.0-x86_64-windows-gnu.exe
 ```
 
 This layout is useful for simple packaging, scripting, or when target separation is not required.
@@ -200,8 +200,8 @@ name_template = "{bin}-{version}-{target}{ext}"
 
 #### Produces (example):
 
-- zemit-0.2.2-x86_64-linux-gnu
-- zemit-0.2.2-x86_64-windows-gnu.exe
+- zemit-0.3.0-x86_64-linux-gnu
+- zemit-0.3.0-x86_64-windows-gnu.exe
 
 #### Template validation
 
@@ -305,8 +305,8 @@ One space separate the hash and the filename.
 Example:
 
 ```txt
-3a5f2d9c9b7e3f0b2e0e1f6e3a9a12f8d77c1f1e3f4a7c8e9d2b6c1a2f3e4d5 zemit-0.2.2-x86_64-linux-gnu
-9c1a2f3e4d53a5f2d9c9b7e3f0b2e0e1f6e3a9a12f8d77c1f1e3f4a7c8e9d2b6 zemit-0.2.2-x86_64-windows-gnu.exe
+3a5f2d9c9b7e3f0.3.0e1f6e3a9a12f8d77c1f1e3f4a7c8e9d2b6c1a2f3e4d5 zemit-0.3.0-x86_64-linux-gnu
+9c1a2f3e4d53a5f2d9c9b7e3f0.3.0e1f6e3a9a12f8d77c1f1e3f4a7c8e9d2b6 zemit-0.3.0-x86_64-windows-gnu.exe
 ```
 
 This format allows verification using standard tools:
@@ -335,8 +335,8 @@ For example:
 
 ```txt
 dist/
-zemit-0.2.2-x86_64-linux-gnu
-zemit-0.2.2-x86_64-windows-gnu.exe
+zemit-0.3.0-x86_64-linux-gnu
+zemit-0.3.0-x86_64-windows-gnu.exe
 checksums.txt
 ```
 
@@ -345,9 +345,9 @@ checksums.txt
 ```txt
 dist/
 x86_64-linux-gnu/
-zemit-0.2.2-x86_64-linux-gnu
+zemit-0.3.0-x86_64-linux-gnu
 x86_64-windows-gnu/
-zemit-0.2.2-x86_64-windows-gnu.exe
+zemit-0.3.0-x86_64-windows-gnu.exe
 checksums.txt
 ```
 
