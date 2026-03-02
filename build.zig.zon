@@ -1,6 +1,6 @@
 .{
     .name = .zemit,
-    .version = "0.2.0",
+    .version = "0.3.0",
     .fingerprint = 0xdae035fabc66b60c,
 
     // external dependencies fetched during build time

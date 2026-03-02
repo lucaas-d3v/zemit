@@ -9,7 +9,7 @@ BIN_SRC="$SCRIPT_DIR/zig-out/bin/zemit"
 
 if ! command -v zig &> /dev/null; then
   echo "Zig is not installed or could not be found."
-  echo "Zig 0.13.0 is recommended."
+  echo "Zig 0.15.2 is recommended."
   exit 1
 fi
 

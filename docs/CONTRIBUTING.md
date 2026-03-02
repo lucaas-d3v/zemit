@@ -39,7 +39,7 @@ zemit prefers **clear stages** over hidden magic.
 
 ## Project status
 
-zemit is currently in **v0.2.x**.
+zemit is currently in **v0.x.x**.
 
 This means:
 - the core architecture is being established
@@ -86,7 +86,7 @@ Please include:
 - Zig version
 - host OS and architecture
 - exact command used
-- full output (use `-v` when possible)
+- full output (use `-V` when possible)
 
 Minimal reproduction steps are strongly encouraged.
 
@@ -203,7 +203,7 @@ Output must be:
 - readable by humans
 - stable for scripts
 - quiet by default
-- detailed with `-v`
+- detailed with `-V`
 
 Rules:
 - colors only when in a TTY
@@ -215,7 +215,7 @@ Rules:
 
 ## Code style
 
-- Zig 0.13.0
+- Zig 0.15.2
 - Avoid unnecessary abstractions
 - Prefer small, testable functions
 - Avoid clever tricks
@@ -247,7 +247,7 @@ cli: add --skip-upload flag
 
 Before opening a PR:
 
-- [ ] Builds with Zig 0.13.0
+- [ ] Builds with Zig 0.15.2
 - [ ] Feature fits one clear pipeline stage
 - [ ] UX is documented (README or help output)
 - [ ] Errors are handled explicitly
