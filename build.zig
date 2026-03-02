@@ -2,8 +2,10 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
+
     const optimize = b.standardOptimizeOption(.{});
-    const strip_opt = b.option(bool, "strip", "Strip debug symbols") orelse false;
+    const is_debug = optimize == .Debug;
+    const is_release_small = optimize == .ReleaseSmall;
 
     const opts = b.addOptions();
     opts.addOption([]const u8, "zemit_version", "0.3.0");
@@ -14,9 +16,14 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
-            .strip = strip_opt,
         }),
     });
+
+    exe.root_module.strip = is_release_small;
+
+    if (!is_debug) {
+        exe.root_module.omit_frame_pointer = true;
+    }
 
     const toml_dep = b.dependency("toml", .{
         .target = target,
