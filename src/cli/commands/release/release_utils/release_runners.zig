@@ -24,6 +24,8 @@ pub fn compileAndMove(release_ctx: *release_enums.ReleaseCtx, io: generals_enums
         try io.stdout.print("Layout: {s}\n", .{release_ctx.layout.getName()});
         try io.stdout.print("Target: {s}\n", .{arch_name});
         try io.stdout.print("Out: {s}\n", .{full});
+
+        _ = try io.stdout.flush();
     }
 
     const temp_prefix = try prepareTempPrefix(release_ctx.alloc, arch_name);
@@ -36,8 +38,12 @@ pub fn compileAndMove(release_ctx: *release_enums.ReleaseCtx, io: generals_enums
 
     if (release_ctx.verbose) {
         try io.stdout.print("Running: ", .{});
-        for (argv_bundle.args.items) |arg| try io.stdout.print("{s} ", .{arg});
+        for (argv_bundle.args.items) |arg| {
+            try io.stdout.print("{s} ", .{arg});
+        }
+
         try io.stdout.print("\n", .{});
+        _ = try io.stdout.flush();
     }
 
     const prefix_line = try std.fmt.allocPrint(release_ctx.alloc, "[{d}/{d}] {s}", .{ i, release_ctx.total, arch_name });
@@ -56,6 +62,7 @@ pub fn compileAndMove(release_ctx: *release_enums.ReleaseCtx, io: generals_enums
         try fmt.printDuration(io.stdout, elapsed_ns, global_flags.color);
         try io.stdout.print("\n", .{});
     }
+    _ = try io.stdout.flush();
 
     const dist_arch_dir = if (release_ctx.layout == .by_target)
         try std.fmt.allocPrint(release_ctx.alloc, "{s}{c}{s}", .{ release_ctx.out_path, sep, arch_name })
@@ -121,25 +128,25 @@ pub fn prepareTempDir(temp_prefix: []const u8) !void {
 }
 
 fn buildArgv(release_ctx: *release_enums.ReleaseCtx, temp_prefix: []const u8, arch_name: []const u8) !release_enums.ArgvBundle {
-    var b = release_enums.ArgvBundle.init(release_ctx.alloc);
+    var b = try release_enums.ArgvBundle.init(release_ctx.alloc);
     errdefer b.deinit();
 
     const target_arg = try b.ownFmt("-Dtarget={s}", .{arch_name});
     const d_optimize_fmt = try b.ownFmt("-Doptimize={s}", .{@tagName(release_ctx.d_optimize)});
 
-    try b.args.append("zig");
-    try b.args.append("build");
-    try b.args.append("--prefix");
-    try b.args.append(temp_prefix);
-    try b.args.append(target_arg);
-    try b.args.append(d_optimize_fmt);
-    try b.args.appendSlice(release_ctx.zig_args);
+    try b.args.append(release_ctx.alloc, "zig");
+    try b.args.append(release_ctx.alloc, "build");
+    try b.args.append(release_ctx.alloc, "--prefix");
+    try b.args.append(release_ctx.alloc, temp_prefix);
+    try b.args.append(release_ctx.alloc, target_arg);
+    try b.args.append(release_ctx.alloc, d_optimize_fmt);
+    try b.args.appendSlice(release_ctx.alloc, release_ctx.zig_args);
 
     return b;
 }
 
 fn runBuild(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const u8, full_argv: []const []const u8, io: generals_enums.Io, full: []const u8) !std.process.Child.Term {
-    const term = try runWithSpinner(release_ctx, prefix_line, full_argv, release_ctx.color);
+    const term = try runWithSpinner(release_ctx, prefix_line, full_argv, release_ctx.color, io);
 
     switch (term) {
         .Exited => |code| {
@@ -147,6 +154,8 @@ fn runBuild(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const u8, ful
                 const fail = try fmt.allocRedText(release_ctx.alloc, "fail", release_ctx.color);
                 defer release_ctx.alloc.free(fail);
                 try io.stderr.print("\r{s} {s} (exit {d})\nOut: {s}\nHint: run `zemit -v release` to see the full compiler output.\n", .{ prefix_line, fail, code, full });
+                _ = try io.stderr.flush();
+
                 return error.CompilationFailed;
             }
         },
@@ -154,13 +163,15 @@ fn runBuild(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const u8, ful
             const inter = try fmt.allocRedText(release_ctx.alloc, "INTERRUPTED", release_ctx.color);
             defer release_ctx.alloc.free(inter);
             try io.stderr.print("\r{s} {s}\nOut: {s}\nHint: run `zemit -v release` to see the full compiler output.\n", .{ prefix_line, inter, full });
+            _ = try io.stderr.flush();
+
             return error.CompilationInterrupted;
         },
     }
     return term;
 }
 
-fn runWithSpinner(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const u8, argv: []const []const u8, color: bool) !std.process.Child.Term {
+fn runWithSpinner(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const u8, argv: []const []const u8, color: bool, io: generals_enums.Io) !std.process.Child.Term {
     var child = std.process.Child.init(argv, release_ctx.alloc);
     child.stdout_behavior = .Inherit;
     child.stderr_behavior = if (release_ctx.verbose) .Inherit else .Ignore;
@@ -174,7 +185,7 @@ fn runWithSpinner(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const u
     state.* = SpinnerState{};
     defer release_ctx.alloc.destroy(state);
 
-    var spinner = try std.Thread.spawn(.{}, spinnerThread, .{ state, prefix_line, color });
+    var spinner = try std.Thread.spawn(.{}, spinnerThread, .{ state, prefix_line, color, io });
     const term = try child.wait();
     state.running.store(false, .release);
     spinner.join();
@@ -182,8 +193,7 @@ fn runWithSpinner(release_ctx: *release_enums.ReleaseCtx, prefix_line: []const u
     return term;
 }
 
-fn spinnerThread(state: *SpinnerState, prefix_line: []const u8, color: bool) void {
-    const stdout = std.io.getStdOut().writer();
+fn spinnerThread(state: *SpinnerState, prefix_line: []const u8, color: bool, io: generals_enums.Io) !void {
     const frames: []const []const u8 = if (color)
         &[_][]const u8{ "\x1b[35m.\x1b[0m", "\x1b[35m..\x1b[0m", "\x1b[35m...\x1b[0m" }
     else
@@ -196,14 +206,17 @@ fn spinnerThread(state: *SpinnerState, prefix_line: []const u8, color: bool) voi
 
     while (state.running.load(.acquire)) {
         if (tick == 0) {
-            stdout.print("\r\x1b[2K{s} {s}", .{ prefix_line, frames[idx] }) catch {};
+            io.stdout.print("\r\x1b[2K{s} {s}", .{ prefix_line, frames[idx] }) catch {};
+            _ = try io.stdout.flush();
+
             idx = (idx + 1) % frames.len;
         }
-        std.time.sleep(polling_delay_ns);
+        std.Thread.sleep(polling_delay_ns);
         tick += 1;
         if (tick >= frames_per_tick) tick = 0;
     }
-    stdout.print("\r\x1b[2K", .{}) catch {};
+    io.stdout.print("\r\x1b[2K", .{}) catch {};
+    _ = try io.stdout.flush();
 }
 
 pub fn getSourceBin(release_ctx: *release_enums.ReleaseCtx, temp_prefix: []const u8, bin_extension: []const u8, sep: u8) ![]const u8 {
@@ -213,16 +226,20 @@ pub fn getSourceBin(release_ctx: *release_enums.ReleaseCtx, temp_prefix: []const
 pub fn moveAndDeleteTempDir(io_ctx: release_enums.IoCtx) !void {
     std.fs.cwd().copyFile(io_ctx.source_bin, std.fs.cwd(), io_ctx.dest_bin, .{}) catch |err| {
         try io_ctx.stderr.print("{s}: Failed to copy file: {}\n", .{ io_ctx.error_fmt, err });
+        _ = try io_ctx.stderr.flush();
+
         return err;
     };
     std.fs.cwd().deleteTree(io_ctx.temp_prefix) catch |err| {
         try io_ctx.stderr.print("{s}: Unable to remove temporary directory: {}\n", .{ io_ctx.warn_fmt, err });
+        _ = try io_ctx.stderr.flush();
     };
 }
 
 fn processAndWriteHash(comptime HasherType: type, file: std.fs.File, disk_writer: anytype, basename: []const u8) !void {
     var hasher = HasherType.init(.{});
     var buffer: [4096 * 2]u8 = undefined;
+    var disk_writer_ = disk_writer.interface;
 
     while (true) {
         const bytes_read = try file.read(&buffer);
@@ -232,16 +249,20 @@ fn processAndWriteHash(comptime HasherType: type, file: std.fs.File, disk_writer
 
     var digest: [HasherType.digest_length]u8 = undefined;
     hasher.final(&digest);
-    try disk_writer.print("{s}  {s}\n", .{ std.fmt.fmtSliceHexLower(&digest), basename });
+
+    const hex = std.fmt.bytesToHex(digest, .lower);
+    try disk_writer_.print("{s}  {s}\n", .{ &hex, basename });
 }
 
 pub fn writeChecksumsContentOf(alloc: std.mem.Allocator, sub_path: []const u8, files: *std.fs.Dir.Walker, checksums: config.Checksums) !void {
     const out_path = try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{ sub_path, std.fs.path.sep, checksums.file });
     defer alloc.free(out_path);
 
+    var buffer: [4096]u8 = undefined;
+
     const out_file = try std.fs.cwd().createFile(out_path, .{});
     defer out_file.close();
-    const disk_writer = out_file.writer();
+    const disk_writer = out_file.writer(&buffer);
 
     while (try files.next()) |entry| {
         if (entry.kind != .file) continue;

@@ -40,37 +40,40 @@ pub const IoCtx = struct {
     sep: u8,
     temp_prefix: []const u8,
     dest_bin: []const u8,
-    stderr: std.io.AnyWriter,
+    stderr: *std.io.Writer,
 };
 
 pub const ArgvBundle = struct {
     args: std.ArrayList([]const u8),
     owned: std.ArrayList([]u8),
+    alloc: std.mem.Allocator,
 
-    pub fn init(alloc: std.mem.Allocator) ArgvBundle {
+    pub fn init(alloc: std.mem.Allocator) !ArgvBundle {
         return .{
-            .args = std.ArrayList([]const u8).init(alloc),
-            .owned = std.ArrayList([]u8).init(alloc),
+            .args = try std.ArrayList([]const u8).initCapacity(alloc, 4),
+            .owned = try std.ArrayList([]u8).initCapacity(alloc, 4),
+            .alloc = alloc,
         };
     }
 
     pub fn deinit(self: *ArgvBundle) void {
-        for (self.owned.items) |s| self.args.allocator.free(s);
-        self.owned.deinit();
-        self.args.deinit();
+        for (self.owned.items) |s| self.alloc.free(s);
+        self.owned.deinit(self.alloc);
+        self.args.deinit(self.alloc);
     }
 
     pub fn ownDup(self: *ArgvBundle, bytes: []const u8) ![]const u8 {
-        const duped = try self.args.allocator.dupe(u8, bytes);
-        errdefer self.args.allocator.free(duped);
-        try self.owned.append(duped);
+        const duped = try self.alloc.dupe(u8, bytes);
+        errdefer self.alloc.free(duped);
+
+        try self.owned.append(self.alloc, duped);
         return duped;
     }
 
     pub fn ownFmt(self: *ArgvBundle, comptime fmt_str: []const u8, args: anytype) ![]const u8 {
-        const s = try std.fmt.allocPrint(self.args.allocator, fmt_str, args);
-        errdefer self.args.allocator.free(s);
-        try self.owned.append(s);
+        const s = try std.fmt.allocPrint(self.alloc, fmt_str, args);
+        errdefer self.alloc.free(s);
+        try self.owned.append(self.alloc, s);
         return s;
     }
 };
@@ -132,7 +135,8 @@ pub const Architectures = enum {
 };
 
 const TargetMap = std.StaticStringMap(Architectures).initComptime(blk: {
-    const fields = @typeInfo(Architectures).Enum.fields;
+    const fields = @typeInfo(Architectures).@"enum".fields;
+
     var pairs: [fields.len]struct { []const u8, Architectures } = undefined;
     for (fields, 0..) |field, i| {
         const enum_val: Architectures = @enumFromInt(field.value);
