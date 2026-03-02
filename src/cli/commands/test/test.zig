@@ -10,4 +10,6 @@ pub fn runTest(alloc: std.mem.Allocator, toml_path: []const u8, release_ctx: *re
     if (try t.value.isOk(alloc, release_ctx, io)) {
         try io.stdout.print("{s} your zemit.toml is ok.\n", .{io.ok_fmt});
     }
+
+    _ = try io.stdout.flush();
 }

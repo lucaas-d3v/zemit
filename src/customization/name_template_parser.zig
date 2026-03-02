@@ -54,6 +54,8 @@ pub const Lexer = struct {
                 i = 0;
                 while (i < var_len) : (i += 1) try io_ctx.stderr.print("^", .{});
                 try io_ctx.stderr.print("\n", .{});
+
+                _ = try io_ctx.stderr.flush();
             }
 
             return .{ .type = t_type, .value = var_name };
@@ -77,20 +79,20 @@ pub const Lexer = struct {
 
 pub fn formatBinaryName(alloc: std.mem.Allocator, template: []const u8, ctx: Context, io_stds: release_enums.IoCtx) ![]const u8 {
     var lexer = Lexer{ .source = template };
-    var output = std.ArrayList(u8).init(alloc);
-    errdefer output.deinit();
+    var output = try std.ArrayList(u8).initCapacity(alloc, 4); // 4 because of the 4 possible variables
+    errdefer output.deinit(alloc);
 
     while (true) {
         const token = try lexer.next(io_stds);
         switch (token.type) {
             .eof => break,
-            .literal => try output.appendSlice(token.value),
-            .bin => try output.appendSlice(ctx.bin),
-            .version => try output.appendSlice(ctx.version),
-            .target => try output.appendSlice(ctx.target),
-            .ext => try output.appendSlice(ctx.ext),
+            .literal => try output.appendSlice(alloc, token.value),
+            .bin => try output.appendSlice(alloc, ctx.bin),
+            .version => try output.appendSlice(alloc, ctx.version),
+            .target => try output.appendSlice(alloc, ctx.target),
+            .ext => try output.appendSlice(alloc, ctx.ext),
             .unknown_var => return error.UnknownVariableInTemplate,
         }
     }
-    return output.toOwnedSlice();
+    return output.toOwnedSlice(alloc);
 }

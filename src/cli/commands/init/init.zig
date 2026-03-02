@@ -9,12 +9,14 @@ pub fn runInit(
 ) !void {
     while (args.next()) |flag| {
         if (checker.cliArgsEquals(flag, &.{ "-h", "--help" })) {
-            helps.helpOf("init", &.{ "", "-h, --help" }, &.{ "Generates the zemit.toml configuration file", "Show this help log." }, io);
+            try helps.helpOf("init", &.{ "", "-h, --help" }, &.{ "Generates the zemit.toml configuration file", "Show this help log." }, io);
             return;
         }
 
-        helps.helpOf("init", &.{ "", "-h, --help" }, &.{ "Generates the zemit.toml configuration file", "Show this help log." }, io);
+        try helps.helpOf("init", &.{ "", "-h, --help" }, &.{ "Generates the zemit.toml configuration file", "Show this help log." }, io);
         try io.stderr.print("Unknown flag for command init: '{s}'\nUse -h or --help to see options.\n", .{flag});
+
+        _ = try io.stderr.flush();
         return;
     }
 
@@ -52,10 +54,14 @@ pub fn runInit(
     const file = std.fs.cwd().createFile("zemit.toml", .{ .exclusive = true }) catch |err| {
         if (err == error.PathAlreadyExists) {
             try io.stderr.print("{s}: 'zemit.toml' already exists in the current directory. Initialization aborted.\n", .{io.warn_fmt});
+            _ = try io.stderr.flush();
+
             return;
         }
 
         try io.stderr.print("{s}: Failed to create 'zemit.toml': {}\n", .{ io.error_fmt, err });
+        _ = try io.stderr.flush();
+
         return err;
     };
     defer file.close();
@@ -63,4 +69,6 @@ pub fn runInit(
     try file.writeAll(default_config_content);
 
     try io.stdout.print("{s} 'zemit.toml' successfully generated!\n", .{io.ok_fmt});
+
+    _ = try io.stdout.flush();
 }

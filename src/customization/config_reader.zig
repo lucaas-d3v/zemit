@@ -66,9 +66,11 @@ pub const Config = struct {
     }
 };
 
-fn isValidChecksums(c: Checksums, io: release_enums.IoCtx) !bool {
+fn isValidChecksums(c: Checksums, io_ctx: release_enums.IoCtx) !bool {
     if (c.file.len == 0) {
-        try io.stderr.print("{s}: The name of checksums file cannot be empty.\n", .{io.error_fmt});
+        try io_ctx.stderr.print("{s}: The name of checksums file cannot be empty.\n", .{io_ctx.error_fmt});
+        _ = try io_ctx.stderr.flush();
+
         return false;
     }
 
@@ -76,11 +78,15 @@ fn isValidChecksums(c: Checksums, io: release_enums.IoCtx) !bool {
     if (dot_pos) |ex_pos| {
         const ext = c.file[@as(u16, @intCast(ex_pos)) + 1 ..];
         if (!checker.strEquals(ext, "txt")) {
-            try io.stderr.print("{s}: The extension '{s}' is not supported for checksums file.\n", .{ io.error_fmt, ext });
+            try io_ctx.stderr.print("{s}: The extension '{s}' is not supported for checksums file.\n", .{ io_ctx.error_fmt, ext });
+            _ = try io_ctx.stderr.flush();
+
             return false;
         }
     } else {
-        try io.stderr.print("{s}: The name of checksums file needs an extension.\n", .{io.error_fmt});
+        try io_ctx.stderr.print("{s}: The name of checksums file needs an extension.\n", .{io_ctx.error_fmt});
+        _ = try io_ctx.stderr.flush();
+
         return false;
     }
     return true;
@@ -90,10 +96,14 @@ fn isValidRelease(r: Release, io: release_enums.IoCtx) !bool {
     for (r.targets) |target| {
         if (target.len == 0) {
             try io.stderr.print("{s}: The architecture described in 'zemit.toml' cannot be empty.\n", .{io.error_fmt});
+            _ = try io.stderr.flush();
+
             return false;
         }
         if (!release_enums.Architectures.exists(target)) {
             try io.stderr.print("{s}: Unknown architecture: '{s}'.\n", .{ io.error_fmt, target });
+            _ = try io.stderr.flush();
+
             return false;
         }
     }
@@ -143,10 +153,14 @@ pub fn loadConfig(allocator: std.mem.Allocator, toml_path: []const u8, io: gener
     const file = std.fs.cwd().openFile(toml_path, .{}) catch |err| {
         if (err == error.FileNotFound) {
             try io.stderr.print("{s}: Configuration file '{s}' not found.\nHint: Create a 'zemit.toml' file in the root of your project.\n", .{ io.error_fmt, toml_path });
+            _ = try io.stderr.flush();
+
             return error.ConfigNotFound;
         }
 
         try io.stderr.print("{s}: Unable to open '{s}': {}\n", .{ io.error_fmt, toml_path, err });
+        _ = try io.stderr.flush();
+
         return err;
     };
     defer file.close();
@@ -166,6 +180,7 @@ pub fn loadConfig(allocator: std.mem.Allocator, toml_path: []const u8, io: gener
             try io.stderr.print("Location: Line {d}, Column {d}\n", .{ info.parse.line, info.parse.pos });
         }
 
+        _ = try io.stderr.flush();
         return error.ParseFailed;
     };
 }
